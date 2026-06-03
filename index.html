@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>ボランティア訪問履歴マップ（決定版）</title>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; font-family: sans-serif; user-select: none; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        /* ポップアップ共通 */
+        .popup-content { width: 290px; max-height: 60vh; overflow-y: auto; font-size: 13px; color: #333; }
+        .building-title { font-weight: bold; font-size: 15px; border-bottom: 2px solid #333; padding-bottom: 4px; margin-bottom: 8px; }
+        
+        /* フォーム・レイアウト */
+        .form-group { margin-bottom: 6px; }
+        .form-group label { display: block; font-size: 11px; font-weight: bold; margin-bottom: 2px; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; box-sizing: border-box; padding: 4px; font-size: 12px; }
+        .btn-row { display: flex; gap: 4px; margin-top: 6px; }
+        .submit-btn { flex: 1; padding: 6px; background: #3FB1CE; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; }
+        .clear-btn { background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        .save-btn { background: #2ecc71; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+
+        /* グリッド（表）スタイル */
+        .grid-table { width: 100%; border-collapse: collapse; margin-top: 6px; text-align: center; font-size: 11px; }
+        .grid-table th, .grid-table td { border: 1px solid #ccc; padding: 4px 2px; }
+        .grid-table th { background: #f4f4f4; }
+        /* 階ラベル（左端）: 狭く・濃色・反転 */
+        .grid-floor { background: #2c3e50; color: #fff; font-weight: bold; width: 22px; min-width: 22px; padding: 2px 0; font-size: 10px; position: sticky; left: 0; }
+        .cell-active { background-color: #e0f7fa; cursor: pointer; font-weight: bold; }
+        .cell-inactive { background-color: #eaeaea; color: #aaa; }
+        /* 操作中の部屋セルを目立たせる */
+        .cell-operating { outline: 3px solid #ff5722; outline-offset: -3px; }
+        
+        /* 履歴・メモスタイル */
+        .history-box { min-height: 48px; max-height: 80px; overflow-y: auto; background: #f9f9f9; border: 1px solid #ddd; padding: 4px; margin-top: 4px; font-size: 11px; }
+        .history-item { border-bottom: 1px dashed #eee; padding: 2px 0; }
+        .memo-section { margin-top: 8px; border-top: 1px solid #ddd; padding-top: 6px; }
+
+        /* マーカー（ピン）の見た目 */
+        .custom-marker { display: flex; justify-content: center; align-items: center; font-weight: bold; border-radius: 50%; cursor: pointer; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+        .marker-kodedate { width: 28px; height: 28px; font-size: 15px; border: 2px solid #333; }
+        .marker-shuga { width: 32px; height: 32px; font-size: 18px; background: #3FB1CE; border: 2px solid white; border-radius: 6px; }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<script>
+    // 岡本様のトークンを設定済み
+    const MY_TOKEN = 'pk.eyJ1IjoidG9ydW8xMTA0IiwiYSI6ImNtcHhiNHk5MTA0dXgycm9hY3F2NGQ5Nm0ifQ.qIgZvkXXSZWY1Mv9FszMJw';
+    mapboxgl.accessToken = MY_TOKEN;
+
+    /* =========================================================================
+     *  外部API設定（GAS Webアプリと fetch で通信）
+     * ========================================================================= */
+    // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyAwX2uQmpFFhh2WOi7dpy0Q6SO57OGivG35KHOqT7OEO2CDH23jWE60ZahT5Q-C20h/exec";
+
+    let USER_EMAIL = '';
+
+    // 起動時に利用者メールを入力（スプレッドシートの共有メンバーのみ利用可）。localStorageに保存。
+    (function initUser() {
+        let email = '';
+        try { email = localStorage.getItem('kuiki_user_email') || ''; } catch (e) {}
+        while (!email) {
+            email = (window.prompt('あなたのメールアドレスを入力してください\n（スプレッドシートの共有メンバーのみ利用できます）') || '').trim();
+        }
+        USER_EMAIL = email;
+        try { localStorage.setItem('kuiki_user_email', email); } catch (e) {}
+    })();
+
+    // GAS API 呼び出し（fetch）。CORSプリフライト回避のため Content-Type は text/plain。
+    // 戻り値は成功時 res.data（= 旧 google.script.run の戻り値と同じ）の Promise。
+    function apiCall(action, params) {
+        return fetch(GAS_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(Object.assign({ action: action, userEmail: USER_EMAIL }, params || {}))
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (res.error) throw new Error(res.message || res.error);
+            return res.data;
+        });
+    }
+
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: [139.89036779018497, 35.72063279470909], // 既定の中心位置
+        zoom: 16
+    });
+
+    // 右上にコンパス（クリックで北が上に戻る）
+    map.addControl(new mapboxgl.NavigationControl({ showZoom: false, showCompass: true, visualizePitch: true }), 'top-right');
+
+    let currentMarkers = [];
+    let activeNewMarker = null;
+    let gridActiveRooms = [];
+    let currentData = []; // 直近にサーバーから受け取ったデータ（編集機能で参照）
+
+    // 集合住宅ピンの色（構成属性で見分ける）
+    function shugaColor(attr) {
+        switch (attr) {
+            case 'ファミリー': return '#e67e22'; // オレンジ
+            case 'シングル':   return '#2980b9'; // ブルー
+            case '混在':       return '#8e44ad'; // パープル
+            default:           return '#3FB1CE'; // 不明など（既定）
+        }
+    }
+
+    // 集合住宅のオートロック有無（新方式=S列。旧データはメモ内から後方互換で取得）
+    function getAutolock(item) {
+        if (item.オートロック) return item.オートロック;
+        const m = String(item.特記事項 || '').match(/オートロック:(あり|なし)/);
+        return m ? m[1] : 'なし';
+    }
+
+    // メモ本文（旧データの「オートロック:xxx / 」プレフィックスを除去）
+    function cleanMemo(item) {
+        const raw = String(item.特記事項 || '');
+        const m = raw.match(/^オートロック:(?:あり|なし)\s*\/\s*([\s\S]*)$/);
+        return m ? m[1] : raw;
+    }
+
+    // ポップアップが画面内に収まるよう、ピンを画面の下寄り中央へ寄せる（上向き吹き出し用）
+    function centerForPopup(lngLat) {
+        const h = map.getContainer().clientHeight;
+        map.easeTo({ center: lngLat, offset: [0, h * 0.2], duration: 300 });
+    }
+
+    // 部屋セルの見た目（状態に応じた色・文字）。未訪問は既定色のまま。
+    function roomVisual(status) {
+        status = status || '';
+        if (status.indexOf('不在(1回目)') >= 0) return { char: '1', bg: '#b3e5fc', color: '#0d3c55' }; // 少し濃く
+        if (status.indexOf('不在(2回目)') >= 0) return { char: '2', bg: '#81d4fa', color: '#0d3c55' }; // さらに濃く
+        if (status.indexOf('不在(3回目)') >= 0) return { char: '3', bg: '#4fc3f7', color: '#06283d' }; // もっと濃く
+        if (status.indexOf('会えた')     >= 0) return { char: '会', bg: '#ffcc80', color: '#5b3b00' }; // 目に優しいオレンジ
+        if (status.indexOf('投函')       >= 0) return { char: '□', bg: '#c8e6c9', color: '#1b5e20' };
+        if (status.indexOf('訪問拒否')   >= 0) return { char: '拒', bg: '#9E2B25', color: '#ffffff' }; // えんじ色
+        if (status.indexOf('外国語')     >= 0) return { char: '外', bg: '#8e44ad', color: '#ffffff' }; // 紫
+        if (status.indexOf('空き家')     >= 0) return { char: '空', bg: '#cfcfcf', color: '#555555' };
+        return { char: null, bg: '#e0f7fa', color: '#333333' }; // 未訪問（既定）
+    }
+
+    // 広域表示（ズームがこの値未満）のときは戸建てを隠し、集合住宅だけ表示する
+    const KODATE_HIDE_BELOW_ZOOM = 16;
+    function applyZoomVisibility() {
+        const showKodate = map.getZoom() >= KODATE_HIDE_BELOW_ZOOM;
+        currentMarkers.forEach(m => {
+            if (m._isKodate) m.getElement().style.display = showKodate ? '' : 'none';
+        });
+    }
+    map.on('zoomend', applyZoomVisibility);
+
+    // ピンが多いときは画面内だけ描画して負荷を抑える（少なければ全件表示）
+    const MAX_RENDER_ALL = 200;
+    let limitedMode = false;
+    function inCurrentView(item) {
+        const lat = parseFloat(item.緯度), lng = parseFloat(item.経度);
+        if (isNaN(lat) || isNaN(lng)) return false;
+        return map.getBounds().contains([lng, lat]);
+    }
+    map.on('moveend', () => {
+        if (!limitedMode) return;
+        if (activeNewMarker || document.querySelector('.mapboxgl-popup')) return; // 操作中は再描画しない
+        renderMarkers(currentData);
+    });
+
+    // 戸建てピンの見た目（属性＝拒否/外国語/空き家 を優先、なければ訪問結果）
+    function kodateVisual(item) {
+        const attr = item.属性;
+        if (attr === '訪問拒否') return { char: '拒', color: 'red' };
+        if (attr === '外国語')   return { char: '外', color: '#8e44ad' };
+        if (attr === '空き家')   return { char: '空', color: 'gray' };
+        const s = item.最新ステータス;
+        if (s === '不在(1回目)') return { char: '1', color: 'black' };
+        if (s === '不在(2回目)') return { char: '2', color: 'blue' };
+        if (s === '不在(3回目)') return { char: '3', color: 'black' };
+        if (s === '会えた')      return { char: '会', color: 'red' };
+        if (s === '投函')        return { char: '□', color: 'green' };
+        if (s === '訪問拒否')    return { char: '拒', color: 'red' };
+        if (s === '外国語')      return { char: '外', color: '#8e44ad' };
+        if (s === '空き家')      return { char: '空', color: 'gray' };
+        return { char: '📍', color: '#3FB1CE' }; // 未訪問
+    }
+
+    map.on('load', () => { loadDataFromSheet(); });
+
+    // 入力フォームや詳細ポップアップが開いていれば閉じる。閉じたものがあれば true を返す。
+    function closeOpenForms() {
+        let closed = false;
+        if (activeNewMarker) { activeNewMarker.remove(); activeNewMarker = null; closed = true; }
+        currentMarkers.forEach(m => {
+            const p = m.getPopup();
+            if (p && p.isOpen()) { m.togglePopup(); closed = true; }
+        });
+        return closed;
+    }
+
+    // タップ判定用の状態（ピンチ/パン中の誤登録を防ぐ）
+    let tapSuppressed = false;
+    let touchStartPt = null;
+
+    // ① 通常タップ/左クリック時 -> 何か開いていればキャンセル、無ければ戸建ての新規登録
+    map.on('click', (e) => {
+        // ピンチ・パン由来のクリックは無視する
+        if (tapSuppressed) { tapSuppressed = false; return; }
+        // 地図の背景（canvas）の場合のみ反応
+        const onCanvas = e.originalEvent && e.originalEvent.target &&
+            typeof e.originalEvent.target.className === 'string' &&
+            e.originalEvent.target.className.includes('mapboxgl-canvas');
+        if (!onCanvas) return;
+        if (closeOpenForms()) return; // 開いていれば閉じるだけ（別地点を指定しない）
+        handleMapClickOrTap(e.lngLat, '戸建て');
+    });
+
+    // ② 長押し/右クリック時 -> 何か開いていればキャンセル、無ければ集合住宅の新規登録
+    map.on('contextmenu', (e) => {
+        if (closeOpenForms()) return;
+        handleMapClickOrTap(e.lngLat, '集合住宅');
+    });
+
+    // タッチ: 複数指（ピンチ）や指の移動（パン）のときは登録しない
+    map.on('touchstart', (e) => {
+        const touches = e.originalEvent.touches;
+        if (touches && touches.length > 1) {
+            tapSuppressed = true;            // ピンチ等のマルチタッチ
+            clearTimeout(window.longPressTimer);
+            return;
+        }
+        tapSuppressed = false;
+        touchStartPt = e.point;
+        // 長押しで集合住宅登録
+        window.longPressTimer = setTimeout(() => {
+            if (tapSuppressed) return;
+            if (closeOpenForms()) return;
+            handleMapClickOrTap(map.unproject([e.point.x, e.point.y]), '集合住宅');
+        }, 800);
+    });
+    map.on('touchmove', (e) => {
+        if (e.originalEvent.touches && e.originalEvent.touches.length > 1) tapSuppressed = true;
+        if (touchStartPt) {
+            const dx = e.point.x - touchStartPt.x;
+            const dy = e.point.y - touchStartPt.y;
+            if (Math.hypot(dx, dy) > 12) { tapSuppressed = true; clearTimeout(window.longPressTimer); }
+        }
+    });
+    map.on('touchend', () => { clearTimeout(window.longPressTimer); });
+
+    // PC: Escape キーで入力フォーム／ポップアップをキャンセル
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeOpenForms();
+    });
+
+    // 新規登録フォーム生成
+    function handleMapClickOrTap(lngLat, forcedType) {
+        if (activeNewMarker) activeNewMarker.remove();
+        gridActiveRooms = [];
+
+        // 座標を100%数値型としてパース
+        const latVal = parseFloat(lngLat.lat);
+        const lngVal = parseFloat(lngLat.lng);
+
+        let formHtml = `<div class="popup-content">`;
+        if (forcedType === '戸建て') {
+            formHtml += `
+                <div class="building-title">📍 戸建てを新規登録</div>
+                <div class="form-group">
+                    <label>属性</label>
+                    <select id="new-attribute-k">
+                        <option value="通常" selected>通常</option>
+                        <option value="訪問拒否">訪問拒否</option>
+                        <option value="外国語">外国語</option>
+                        <option value="空き家">空き家</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>訪問状況</label>
+                    <select id="new-status">
+                        <option value="">未訪問</option>
+                        <option value="不在(1回目)" selected>不在</option>
+                        <option value="会えた">会えた</option>
+                        <option value="投函">投函</option>
+                    </select>
+                </div>
+                <div class="form-group"><label>メモ</label><textarea id="new-memo" rows="2" placeholder="例：留守がち"></textarea></div>
+                <button class="submit-btn" id="reg-btn" onclick="submitNewLocation(${latVal}, ${lngVal}, '戸建て')">登録</button>
+            `;
+        } else {
+            formHtml += `
+                <div class="building-title">🏢 集合住宅を新規登録</div>
+                <div class="form-group"><label>建物名</label><input type="text" id="new-name" placeholder="例：ハイツ小岩"></div>
+                <div class="form-row" style="display:flex; gap:4px;">
+                    <div class="form-group" style="flex:1;"><label>階数</label>
+                        <select id="new-floors" onchange="generateSetupGrid()">${[1,2,3,4,5,6,7,8,9,10].map(v=>`<option value="${v}">${v}階</option>`).join('')}</select>
+                    </div>
+                    <div class="form-group" style="flex:1;"><label>最大部屋番号(下2桁)</label>
+                        <select id="new-maxroom" onchange="generateSetupGrid()">${Array.from({length:20},(_,i)=>i+1).map(v=>`<option value="${v}">${String(v).padStart(2,'0')}</option>`).join('')}</select>
+                    </div>
+                </div>
+                <div class="form-group" style="margin:2px 0;">
+                    <label style="display:flex; align-items:center; gap:4px; font-weight:normal; font-size:11px;">
+                        <input type="checkbox" id="new-hideroom" style="width:auto;" onchange="renderRoomGrid()"> 部屋番号が不明（番号を表示しない）
+                    </label>
+                </div>
+                <label style="font-size:11px; font-weight:bold;">緑=部屋あり（初期は全選択）。無い部屋をタップで外す</label>
+                <div id="setup-grid-container" style="max-height:120px; overflow:auto; margin-bottom:8px;"></div>
+                <div class="form-group"><label>オートロック</label><select id="new-lock"><option value="なし">なし</option><option value="あり">あり</option></select></div>
+                <div class="form-group"><label>管理人</label><select id="new-manager"><option value="なし">なし</option><option value="あり">あり</option></select></div>
+                <div class="form-group"><label>構成属性</label><select id="new-attribute"><option value="不明">不明</option><option value="ファミリー">ファミリー</option><option value="シングル">シングル</option><option value="混在">混在</option></select></div>
+                <div class="form-group"><label>メモ</label><input type="text" id="new-memo"></div>
+                <button class="submit-btn" id="reg-btn" onclick="submitNewLocation(${latVal}, ${lngVal}, '集合住宅')">登録</button>
+            `;
+        }
+        formHtml += `</div>`;
+
+        const popup = new mapboxgl.Popup({ offset: 25, closeOnClick: false, maxWidth: 'none', anchor: 'bottom', focusAfterOpen: false }).setHTML(formHtml);
+        activeNewMarker = new mapboxgl.Marker({ color: forcedType === '戸建て' ? '#f1c40f' : '#e74c3c' })
+            .setLngLat([lngVal, latVal])
+            .setPopup(popup)
+            .addTo(map);
+        activeNewMarker.togglePopup();
+        centerForPopup([lngVal, latVal]);
+
+        if (forcedType === '集合住宅') { setTimeout(generateSetupGrid, 100); }
+    }
+
+    // グリッドの現在の階数・最大部屋番号を取得
+    function getGridDims() {
+        return {
+            floors: parseInt(document.getElementById('new-floors').value),
+            maxRoom: parseInt(document.getElementById('new-maxroom').value)
+        };
+    }
+
+    // 「部屋番号が不明」チェックの状態
+    function isHideRoomNum() {
+        const cb = document.getElementById('new-hideroom');
+        return !!(cb && cb.checked);
+    }
+
+    // gridActiveRooms の選択状態に従ってグリッドを描画
+    function renderRoomGrid() {
+        const { floors, maxRoom } = getGridDims();
+        const hideNum = isHideRoomNum();
+        let html = '<div style="overflow-x:auto;"><table class="grid-table" style="width:auto;"><tbody>';
+        for (let f = floors; f >= 1; f--) {
+            html += `<tr><td class="grid-floor">${f}F</td>`;
+            for (let r = 1; r <= maxRoom; r++) {
+                const roomNum = f * 100 + r;
+                const active = gridActiveRooms.includes(roomNum);
+                const label = hideNum ? '' : String(f * 100 + r);
+                html += `<td id="setup-rm-${roomNum}" onclick="toggleSetupRoom(${roomNum})" style="min-width:30px; background:${active ? '#2ecc71' : '#fff'}; color:${active ? '#fff' : '#333'}; cursor:pointer;">${label}</td>`;
+            }
+            html += `</tr>`;
+        }
+        html += '</tbody></table></div>';
+        document.getElementById('setup-grid-container').innerHTML = html;
+    }
+
+    // 新規登録用: 全室を選択済みにして描画（不要な部屋をタップして外す運用）
+    function generateSetupGrid() {
+        const { floors, maxRoom } = getGridDims();
+        gridActiveRooms = [];
+        for (let f = 1; f <= floors; f++) {
+            for (let r = 1; r <= maxRoom; r++) gridActiveRooms.push(f * 100 + r);
+        }
+        renderRoomGrid();
+    }
+
+    function toggleSetupRoom(roomNum) {
+        const el = document.getElementById(`setup-rm-${roomNum}`);
+        const idx = gridActiveRooms.indexOf(roomNum);
+        if (idx > -1) {
+            gridActiveRooms.splice(idx, 1);
+            el.style.background = '#fff'; el.style.color = '#333';
+        } else {
+            gridActiveRooms.push(roomNum);
+            el.style.background = '#2ecc71'; el.style.color = '#fff';
+        }
+    }
+
+    function submitNewLocation(lat, lng, type) {
+        let name = '';
+        if (type === '集合住宅') {
+            name = document.getElementById('new-name').value;
+            if (!name) { alert('建物名を入力してください'); return; }
+        }
+
+        let data = { type: type, name: name, lat: parseFloat(lat), lng: parseFloat(lng), memo: document.getElementById('new-memo').value, attribute: '不明' };
+
+        if (type === '戸建て') {
+            data.status = document.getElementById('new-status').value;
+            data.attribute = document.getElementById('new-attribute-k').value; // 通常/訪問拒否/外国語/空き家
+        } else {
+            data.floors = document.getElementById('new-floors').value;
+            data.maxRoomNum = document.getElementById('new-maxroom').value;
+            data.validRooms = gridActiveRooms.join(',');
+            data.totalRooms = gridActiveRooms.length;
+            data.manager = document.getElementById('new-manager').value;
+            data.attribute = document.getElementById('new-attribute').value;
+            data.lock = document.getElementById('new-lock').value;
+            data.hideRoomNum = isHideRoomNum();
+        }
+
+        const btn = document.getElementById('reg-btn');
+        btn.disabled = true; btn.innerText = '登録中...';
+
+        apiCall('addNew', { data: data }).then((latestData) => {
+            if (activeNewMarker) activeNewMarker.remove();
+            activeNewMarker = null;
+            showToast('登録しました', false);
+            renderMarkers(latestData);
+        }).catch((err) => {
+            btn.disabled = false; btn.innerText = '登録';
+            handleServerError(err);
+        });
+    }
+
+    function loadDataFromSheet() {
+        apiCall('getData', {}).then(renderMarkers).catch(handleServerError);
+    }
+
+    // サーバー側エラーを画面に出して原因を分かるようにする
+    function handleServerError(err) {
+        console.error('サーバーエラー:', err);
+        const msg = (err && err.message) ? err.message : String(err);
+        // アクセス拒否時はメールを入力し直してもらう
+        if (msg.indexOf('Access Denied') >= 0 || msg.indexOf('利用権限') >= 0) {
+            try { localStorage.removeItem('kuiki_user_email'); } catch (e) {}
+            const re = (window.prompt('利用権限がありません。共有メンバーのメールアドレスを入力し直してください。') || '').trim();
+            if (re) {
+                USER_EMAIL = re;
+                try { localStorage.setItem('kuiki_user_email', re); } catch (e) {}
+                loadDataFromSheet();
+            } else {
+                showToast('アクセス権がありません。', true);
+            }
+            return;
+        }
+        showToast('通信エラー: ' + msg, true);
+    }
+
+    function showToast(msg, isError) {
+        let el = document.getElementById('app-toast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'app-toast';
+            el.style.cssText = 'position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:9999; padding:8px 14px; border-radius:6px; font-size:13px; box-shadow:0 2px 6px rgba(0,0,0,0.3); max-width:90%; text-align:center;';
+            document.body.appendChild(el);
+        }
+        el.style.background = isError ? '#e74c3c' : '#2ecc71';
+        el.style.color = '#fff';
+        el.textContent = msg;
+        el.style.display = 'block';
+        clearTimeout(window._toastTimer);
+        window._toastTimer = setTimeout(() => { el.style.display = 'none'; }, isError ? 8000 : 2500);
+    }
+
+    // ✨ 最重要: スプレッドシートから読み込んだ瞬間に「絶対数値化」する描画処理
+    function renderMarkers(data) {
+        currentMarkers.forEach(m => m.remove());
+        currentMarkers = [];
+
+        if (!Array.isArray(data)) {
+            console.error('renderMarkers: 配列ではありません', data);
+            showToast('データ形式が不正です（配列ではありません）', true);
+            return;
+        }
+        currentData = data;
+
+        // ピンが多いときは画面内のみ描画（少なければ全件）
+        limitedMode = data.length > MAX_RENDER_ALL;
+        const renderList = limitedMode ? data.filter(inCurrentView) : data;
+
+        const groups = {};
+        let skipped = 0;
+        renderList.forEach(item => {
+            // ここで文字列の座標を「浮動小数点数」へ強制パース
+            const lat = parseFloat(item.緯度);
+            const lng = parseFloat(item.経度);
+
+            // 座標として有効ではない行（空白、不正テキストなど）は安全にスキップ
+            if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) { skipped++; return; }
+
+            const key = `${lat.toFixed(6)}_${lng.toFixed(6)}`;
+            // パース済みの数値座標をグループに保持（マーカー生成時の再パースを排除）
+            if (!groups[key]) groups[key] = { lat, lng, items: [] };
+            groups[key].items.push(item);
+        });
+
+        console.log(`受信データ ${data.length} 件 / 表示ピン ${Object.keys(groups).length} 件 / 座標無効スキップ ${skipped} 件`);
+        if (data.length > 0 && Object.keys(groups).length === 0) {
+            showToast('座標が読み取れる行がありません（F列=緯度 / G列=経度 を確認）', true);
+        }
+
+        Object.keys(groups).forEach(key => {
+          try {
+            const group = groups[key];
+            const items = group.items;
+            const firstItem = items[0];
+            const markerEl = document.createElement('div');
+            markerEl.className = 'custom-marker';
+
+            let popupHtml = `<div class="popup-content">`;
+
+            if (firstItem.種別 === '集合住宅') {
+                markerEl.className += ' marker-shuga';
+                // 戸数が12以下はアパート(🏘️)、13以上はマンション(🏢)
+                const units = parseInt(firstItem.総戸数) || (firstItem.有効部屋リスト ? String(firstItem.有効部屋リスト).split(',').filter(s => s !== '').length : 0);
+                markerEl.innerHTML = units > 12 ? '🏢' : '🏘️';
+                // 背景＝構成属性（ファミリー/シングル等）で色分け
+                markerEl.style.background = shugaColor(firstItem.属性);
+                // 枠＝オートロック（あり=えんじ色 / なし=青）
+                markerEl.style.border = '3px solid ' + (getAutolock(firstItem) === 'あり' ? '#9E2B25' : '#1565C0');
+                popupHtml += createShugaViewHtml(items);
+            } else {
+                markerEl.className += ' marker-kodedate';
+                const kv = kodateVisual(firstItem);
+                markerEl.innerHTML = kv.char;
+                markerEl.style.color = kv.color;
+                popupHtml += createKodedateViewHtml(firstItem);
+            }
+            popupHtml += `</div>`;
+
+            const popup = new mapboxgl.Popup({ offset: 25, closeOnClick: false, maxWidth: 'none', anchor: 'bottom', focusAfterOpen: false }).setHTML(popupHtml);
+
+            // 【数値保証】グループ化時にパース済みの数値座標 [lng, lat] でマーカーを作成
+            const marker = new mapboxgl.Marker(markerEl)
+                .setLngLat([group.lng, group.lat])
+                .setPopup(popup)
+                .addTo(map);
+            marker._isKodate = (firstItem.種別 !== '集合住宅'); // 広域表示の出し分け用
+            marker._rowNumber = firstItem.rowNumber;            // 部屋更新時にポップアップを特定する用
+
+            // このマーカーを開くときは、新規フォームや他の開いているポップアップを閉じる
+            markerEl.addEventListener('click', () => {
+                if (activeNewMarker) { activeNewMarker.remove(); activeNewMarker = null; }
+                currentMarkers.forEach(other => {
+                    if (other !== marker) { const op = other.getPopup(); if (op && op.isOpen()) other.togglePopup(); }
+                });
+                centerForPopup(marker.getLngLat());
+            });
+            currentMarkers.push(marker);
+          } catch (err) {
+            console.error('マーカー描画スキップ:', key, err);
+          }
+        });
+
+        applyZoomVisibility(); // 現在のズームに応じて戸建ての表示/非表示を反映
+    }
+
+    // 戸建て詳細ポップアップ画面
+    function createKodedateViewHtml(item) {
+        let historyHtml = '';
+        if (item.履歴データ) {
+            try {
+                const arr = JSON.parse(item.履歴データ);
+                historyHtml = arr.map(h => `<div class="history-item"><b>${h.status}</b> ${h.time}</div>`).join('');
+            } catch(e){}
+        }
+
+        const attr = item.属性;
+        const sel = (v) => attr === v ? 'selected' : '';
+        const normalSel = (attr === '訪問拒否' || attr === '外国語' || attr === '空き家') ? '' : 'selected';
+
+        return `
+            <div class="building-title">${item['建物名 / 世帯名'] || '戸建て'}</div>
+            <div class="form-group">
+                <label style="font-size:11px; font-weight:bold;">属性</label>
+                <select onchange="saveAttribute(${item.rowNumber}, this.value)">
+                    <option value="通常" ${normalSel}>通常</option>
+                    <option value="訪問拒否" ${sel('訪問拒否')}>訪問拒否 拒</option>
+                    <option value="外国語" ${sel('外国語')}>外国語 外</option>
+                    <option value="空き家" ${sel('空き家')}>空き家 空</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label style="font-size:11px; font-weight:bold;">訪問状況（履歴に残る）</label>
+                <select onchange="saveStatus(${item.rowNumber}, this.value)">
+                    <option value="">-- 選択 --</option>
+                    <option value="不在">不在</option>
+                    <option value="会えた">会えた</option>
+                    <option value="投函">投函</option>
+                </select>
+            </div>
+            <div style="font-weight:bold; font-size:11px; margin-top:6px;">履歴欄</div>
+            <div class="history-box">${historyHtml || '<div style="color:#aaa;">履歴なし</div>'}</div>
+
+            <div class="memo-section">
+                <label style="font-size:11px; font-weight:bold;">メモ</label>
+                <textarea id="memo-${item.rowNumber}" rows="2" style="width:100%; font-size:12px;" readonly onpointerdown="this.removeAttribute('readonly')">${item.特記事項 || ''}</textarea>
+                <div class="btn-row">
+                    <button class="save-btn" onclick="saveMemo(${item.rowNumber})">保存</button>
+                    <button class="clear-btn" onclick="clearMemo(${item.rowNumber})">クリア</button>
+                </div>
+            </div>
+            <button class="clear-btn" style="width:100%; margin-top:8px;" onclick="confirmDelete(${item.rowNumber})">🗑 このピンを削除</button>
+        `;
+    }
+
+    // 集合住宅詳細・グリッドテーブル画面
+    function createShugaViewHtml(items) {
+        const first = items[0];
+        const floors = parseInt(first.階数 || 1);
+        const maxRoom = parseInt(first.最大部屋番号 || 1);
+        const validRoomsArr = String(first.有効部屋リスト || "").split(',').map(Number);
+
+        // 部屋ごとの現在ステータス（T列のJSON）を取得し、色分けに使う
+        let roomStatusMap = {};
+        try { roomStatusMap = JSON.parse(first.部屋ステータス || '{}') || {}; } catch(e) { roomStatusMap = {}; }
+        const hideNum = String(first.部屋番号非表示) === '1';
+
+        // 6部屋以上のときに横スクロールできるよう、テーブルを内容幅で配置
+        let gridHtml = '<div style="overflow-x:auto;"><table class="grid-table" style="width:auto;"><tbody>';
+        for (let f = floors; f >= 1; f--) {
+            gridHtml += `<tr><td class="grid-floor">${f}F</td>`;
+            for (let r = 1; r <= maxRoom; r++) {
+                const roomNum = f * 100 + r;
+                if (validRoomsArr.includes(roomNum)) {
+                    // 色は状態で変えるが、文字は常に部屋番号（303など）。番号不明時は空欄。
+                    const v = roomVisual(roomStatusMap[roomNum]);
+                    const label = hideNum ? '' : roomNum;
+                    gridHtml += `<td class="cell-active" data-room="${roomNum}" style="min-width:32px; background:${v.bg}; color:${v.color};" onclick="showRoomAction(${first.rowNumber}, ${roomNum}, this)">${label}</td>`;
+                } else {
+                    gridHtml += `<td class="cell-inactive"></td>`;
+                }
+            }
+            gridHtml += '</tr>';
+        }
+        gridHtml += '</tbody></table></div>';
+
+        return `
+            <div class="building-title">${first['建物名 / 世帯名']}</div>
+            <div style="font-size:11px; color:#666; margin-bottom:4px;">
+                管理人: ${first.管理人} ｜ 構成: ${first.属性} ｜ オートロック: ${getAutolock(first)}
+            </div>
+            ${gridHtml}
+            <div id="room-action-area" style="margin-top:8px; display:none; border:1px solid #3FB1CE; padding:6px; background:#f0f7f9;"></div>
+
+            <div class="memo-section">
+                <label style="font-size:11px; font-weight:bold;">メモ</label>
+                <textarea id="memo-${first.rowNumber}" rows="1" style="width:100%; font-size:11px;" readonly onpointerdown="this.removeAttribute('readonly')">${cleanMemo(first)}</textarea>
+                <div class="btn-row">
+                    <button class="save-btn" onclick="saveMemo(${first.rowNumber})">保存</button>
+                    <button class="clear-btn" onclick="clearMemo(${first.rowNumber})">クリア</button>
+                </div>
+            </div>
+            <button class="save-btn" style="background:#34495e; width:100%; margin-top:8px;" onclick="showShugaEditForm(${first.rowNumber}, this)">✏️ 建物情報を編集</button>
+            <button class="clear-btn" style="width:100%; margin-top:6px;" onclick="confirmDelete(${first.rowNumber})">🗑 このピンを削除</button>
+        `;
+    }
+
+    // 集合住宅の建物情報を編集するフォームを表示（詳細表示を差し替え）
+    function showShugaEditForm(rowNumber, btn) {
+        const item = currentData.find(d => d.rowNumber === rowNumber);
+        if (!item) { showToast('編集対象が見つかりません', true); return; }
+
+        const floors = parseInt(item.階数) || 1;
+        const maxRoom = parseInt(item.最大部屋番号) || 1;
+        // 現在の有効部屋を選択状態に設定
+        gridActiveRooms = String(item.有効部屋リスト || '').split(',').map(s => parseInt(s)).filter(n => !isNaN(n));
+
+        const lock = getAutolock(item);
+        const memoText = cleanMemo(item);
+
+        const opt = (v, label, cur) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${label}</option>`;
+        const floorOpts = [1,2,3,4,5,6,7,8,9,10].map(v => opt(v, v + '階', floors)).join('');
+        const roomOpts = Array.from({length:20},(_,i)=>i+1).map(v => opt(v, String(v).padStart(2,'0'), maxRoom)).join('');
+        const lockOpts = ['なし','あり'].map(v => opt(v, v, lock)).join('');
+        const mgrOpts = ['なし','あり'].map(v => opt(v, v, item.管理人)).join('');
+        const attrOpts = ['不明','ファミリー','シングル','混在'].map(v => opt(v, v, item.属性)).join('');
+        const esc = (s) => String(s).replace(/"/g, '&quot;');
+
+        const html = `
+            <div class="building-title">✏️ 建物情報を編集</div>
+            <div class="form-group"><label>建物名</label><input type="text" id="new-name" value="${esc(item['建物名 / 世帯名'] || '')}"></div>
+            <div class="form-row" style="display:flex; gap:4px;">
+                <div class="form-group" style="flex:1;"><label>階数</label>
+                    <select id="new-floors" onchange="renderRoomGrid()">${floorOpts}</select>
+                </div>
+                <div class="form-group" style="flex:1;"><label>最大部屋番号(下2桁)</label>
+                    <select id="new-maxroom" onchange="renderRoomGrid()">${roomOpts}</select>
+                </div>
+            </div>
+            <div class="form-group" style="margin:2px 0;">
+                <label style="display:flex; align-items:center; gap:4px; font-weight:normal; font-size:11px;">
+                    <input type="checkbox" id="new-hideroom" style="width:auto;" onchange="renderRoomGrid()" ${String(item.部屋番号非表示) === '1' ? 'checked' : ''}> 部屋番号が不明（番号を表示しない）
+                </label>
+            </div>
+            <label style="font-size:11px; font-weight:bold;">緑=有効。不要な部屋をタップで外す</label>
+            <div id="setup-grid-container" style="max-height:120px; overflow:auto; margin-bottom:8px;"></div>
+            <div class="form-group"><label>オートロック</label><select id="new-lock">${lockOpts}</select></div>
+            <div class="form-group"><label>管理人</label><select id="new-manager">${mgrOpts}</select></div>
+            <div class="form-group"><label>構成属性</label><select id="new-attribute">${attrOpts}</select></div>
+            <div class="form-group"><label>メモ</label><input type="text" id="new-memo" value="${esc(memoText)}"></div>
+            <div class="btn-row">
+                <button class="submit-btn" id="edit-save-btn" onclick="saveShugaEdit(${rowNumber}, this)">更新を保存</button>
+                <button class="clear-btn" onclick="cancelShugaEdit(${rowNumber}, this)">閉じる</button>
+            </div>
+        `;
+        btn.closest('.popup-content').innerHTML = html;
+        renderRoomGrid();
+    }
+
+    // 集合住宅の編集内容を保存
+    function saveShugaEdit(rowNumber, btn) {
+        const name = document.getElementById('new-name').value;
+        if (!name) { alert('建物名を入力してください'); return; }
+        const { floors, maxRoom } = getGridDims();
+        // 現在のグリッド範囲内の選択のみを有効として保存
+        const valid = gridActiveRooms.filter(rn => Math.floor(rn / 100) <= floors && (rn % 100) <= maxRoom).sort((a, b) => a - b);
+
+        const data = {
+            rowNumber: rowNumber,
+            name: name,
+            floors: floors,
+            maxRoomNum: maxRoom,
+            validRooms: valid.join(','),
+            totalRooms: valid.length,
+            manager: document.getElementById('new-manager').value,
+            attribute: document.getElementById('new-attribute').value,
+            lock: document.getElementById('new-lock').value,
+            memo: document.getElementById('new-memo').value,
+            hideRoomNum: isHideRoomNum()
+        };
+
+        btn.disabled = true; btn.innerText = '保存中...';
+        apiCall('updateBuilding', { data: data }).then((latest) => {
+            showToast('建物情報を更新しました', false);
+            renderMarkers(latest);
+        }).catch((err) => {
+            btn.disabled = false; btn.innerText = '更新を保存';
+            handleServerError(err);
+        });
+    }
+
+    // 編集をキャンセルして詳細表示に戻す（更新しない）
+    function cancelShugaEdit(rowNumber, btn) {
+        const item = currentData.find(d => d.rowNumber === rowNumber);
+        const container = btn.closest('.popup-content');
+        if (item && container) {
+            container.innerHTML = createShugaViewHtml([item]);
+        } else {
+            closeOpenForms();
+        }
+    }
+
+    function showRoomAction(buildingRow, roomNum, cellEl) {
+        // 操作中のセルをハイライト（どこを操作しているか分かるように）
+        document.querySelectorAll('.cell-operating').forEach(el => el.classList.remove('cell-operating'));
+        if (cellEl) cellEl.classList.add('cell-operating');
+
+        // この部屋の履歴を、建物の履歴データから抽出
+        let historyHtml = '';
+        const item = currentData.find(d => d.rowNumber === buildingRow);
+        if (item && item.履歴データ) {
+            try {
+                const arr = JSON.parse(item.履歴データ);
+                const prefix = roomNum + '号室:';
+                historyHtml = arr.filter(h => String(h.status).indexOf(prefix) === 0)
+                    .map(h => `<div style="font-size:10px; border-bottom:1px dashed #eee;"><b>${h.status}</b> ${h.time}</div>`).join('');
+            } catch(e){}
+        }
+
+        const hideNum = item && String(item.部屋番号非表示) === '1';
+        const title = hideNum ? '🚪 部屋の操作' : `🚪 ${roomNum}号室の操作`;
+
+        const html = `
+            <div style="font-weight:bold; margin-bottom:4px; font-size:12px;">${title}</div>
+            <label style="font-size:10px; font-weight:bold;">訪問状況（履歴に残る）</label>
+            <select style="width:100%; font-size:11px; padding:2px;" onchange="saveRoomStatus(${buildingRow}, ${roomNum}, this.value)">
+                <option value="">-- 選択 --</option>
+                <option value="不在">不在</option>
+                <option value="会えた">会えた</option>
+                <option value="投函">投函</option>
+            </select>
+            <label style="font-size:10px; font-weight:bold; margin-top:4px; display:block;">状態（履歴に残さない）</label>
+            <select style="width:100%; font-size:11px; padding:2px;" onchange="saveRoomState(${buildingRow}, ${roomNum}, this.value)">
+                <option value="">-- 変更なし --</option>
+                <option value="未訪問">通常（未訪問に戻す）</option>
+                <option value="訪問拒否">訪問拒否 拒</option>
+                <option value="外国語">外国語 外</option>
+                <option value="空き家">空き家 空</option>
+            </select>
+            <div style="font-weight:bold; font-size:10px; margin-top:4px;">部屋の履歴:</div>
+            <div style="max-height:40px; overflow-y:auto; background:white; padding:2px; border:1px solid #ccc;">${historyHtml || '履歴なし'}</div>
+        `;
+        const area = document.getElementById('room-action-area');
+        area.innerHTML = html;
+        area.style.display = 'block';
+    }
+
+    // 「不在」を選ぶと現在の状況から不在回数を1つ繰り上げる
+    function nextAbsence(current) {
+        current = current || '';
+        if (current.indexOf('不在(1回目)') >= 0) return '不在(2回目)';
+        if (current.indexOf('不在(2回目)') >= 0) return '不在(3回目)';
+        if (current.indexOf('不在(3回目)') >= 0) return '不在(3回目)'; // 3回で打ち止め
+        return '不在(1回目)';
+    }
+
+    function saveStatus(rowNumber, val) {
+        if(!val) return;
+        let status = val;
+        if (val === '不在') {
+            const item = currentData.find(d => d.rowNumber === rowNumber);
+            status = nextAbsence(item ? item.最新ステータス : '');
+        }
+        apiCall('updateLocation', { rowNumber: rowNumber, status: status, memoText: null, isClearMemo: false }).then(renderMarkers).catch(handleServerError);
+    }
+
+    // 部屋の更新を、ポップアップを閉じずにグリッドの色・履歴だけ最新化する
+    function applyRoomChange(buildingRow, roomNum, finalStatus, addHistory) {
+        apiCall('updateRoom', { buildingRow: buildingRow, roomNum: roomNum, status: finalStatus, addHistory: addHistory }).then((latest) => {
+            currentData = latest;
+            const item = currentData.find(d => d.rowNumber === buildingRow);
+            const marker = currentMarkers.find(m => m._rowNumber === buildingRow);
+            const popup = marker ? marker.getPopup() : null;
+            if (item && popup) {
+                // ポップアップ自体のHTMLを更新（再オープンしても最新の色を保つ）
+                popup.setHTML('<div class="popup-content">' + createShugaViewHtml([item]) + '</div>');
+                const root = popup.getElement();
+                const newCell = root ? root.querySelector(`[data-room="${roomNum}"]`) : null;
+                showRoomAction(buildingRow, roomNum, newCell); // 操作欄を開き直し履歴も更新
+            } else {
+                renderMarkers(latest); // フォールバック
+            }
+        }).catch(handleServerError);
+    }
+
+    function saveRoomStatus(buildingRow, roomNum, val) {
+        if(!val) return;
+        let status = val;
+        if (val === '不在') {
+            const item = currentData.find(d => d.rowNumber === buildingRow);
+            let cur = '';
+            try { cur = (JSON.parse((item && item.部屋ステータス) || '{}') || {})[roomNum] || ''; } catch(e){}
+            status = nextAbsence(cur);
+        }
+        applyRoomChange(buildingRow, roomNum, status, true);
+    }
+
+    // 属性（通常/訪問拒否/外国語/空き家）の更新。J列を更新し、履歴には残さない。
+    function saveAttribute(rowNumber, attribute) {
+        if(!attribute) return;
+        apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: null, isClearMemo: false, addHistory: false, attribute: attribute }).then(renderMarkers).catch(handleServerError);
+    }
+
+    function saveRoomState(buildingRow, roomNum, state) {
+        if(!state) return;
+        applyRoomChange(buildingRow, roomNum, state, false);
+    }
+
+    // ピン（地点）の削除。実行前に必ず確認する
+    function confirmDelete(rowNumber) {
+        if (!confirm("このピンを削除します。\n登録内容・履歴もすべて消え、元に戻せません。\n\n削除してよろしいですか？")) return;
+        apiCall('deleteLocation', { rowNumber: rowNumber })
+            .then((latest) => { showToast('削除しました', false); renderMarkers(latest); })
+            .catch(handleServerError);
+    }
+
+    function saveMemo(rowNumber) {
+        const txt = document.getElementById(`memo-${rowNumber}`).value;
+        apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: txt, isClearMemo: false }).then((latestData) => { showToast('メモを保存しました', false); renderMarkers(latestData); }).catch(handleServerError);
+    }
+
+    function clearMemo(rowNumber) {
+        if (confirm("メモをクリアしますか？\n「OK」でクリア、「キャンセル」で戻る")) {
+            apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: null, isClearMemo: true }).then(renderMarkers).catch(handleServerError);
+        }
+    }
+</script>
+
+</body>
+</html>
