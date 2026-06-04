@@ -74,6 +74,11 @@
         .inline-group label { min-width: 58px; font-size: 11px; font-weight: bold; white-space: nowrap; flex-shrink: 0; margin: 0; }
         .inline-group select { flex: 1; box-sizing: border-box; padding: 4px; font-size: 12px; }
 
+        /* ── 処理中インジケーター（サーバー通信中に表示） ── */
+        #busy-indicator { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10001; background: rgba(44,62,80,0.92); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px; display: none; align-items: center; gap: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+        #busy-indicator .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: busy-spin 0.7s linear infinite; }
+        @keyframes busy-spin { to { transform: rotate(360deg); } }
+
         /* ── モバイル自動拡大（マーカーサイズはJS管理のため指定なし） ── */
         @media (max-width: 600px) {
             .popup-content { width: min(320px, 92vw) !important; font-size: 14px !important; }
@@ -156,7 +161,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxlAHF8wDj8wVtI5dw8sEpTod9DDbhkabHTGvLVEsJM14t1LjjUBBi9RgqQZaS7bcGM/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyW5ouggAsuFpVvGwkKkS0yKxLjLBBzYxhidWoyIf7jzTOMQZVL2Gh8c80b0OQ8eZbO/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -259,7 +264,7 @@
         style: 'mapbox://styles/mapbox/streets-v12',
         center: [139.89036779018497, 35.72063279470909], // 既定の中心位置
         zoom: 16,
-        bearingSnap: 24 // 北付近の小さな（意図しない）回転は指を離すと北に戻す＝誤回転を抑制
+        bearingSnap: 18 // 北付近の小さな（意図しない）回転は指を離すと北に戻す＝誤回転を抑制
     });
 
     // 右上にコンパス（クリックで北が上に戻る）
@@ -294,10 +299,27 @@
         return m ? m[1] : raw;
     }
 
-    // ポップアップが画面内に収まるよう、ピンを画面の下寄り中央へ寄せる（上向き吹き出し用）
+    // ポップアップが画面内に収まるよう、ピンを画面の下寄り中央へ寄せる（上向き吹き出し用・簡易版）
     function centerForPopup(lngLat) {
         const h = map.getContainer().clientHeight;
-        map.easeTo({ center: lngLat, offset: [0, h * 0.2], duration: 300 });
+        map.easeTo({ center: lngLat, offset: [0, h * 0.18], duration: 300 });
+    }
+
+    // 吹き出しの実高さを測り、ピンと吹き出しの両方が画面に収まるようピン位置を下げる。
+    // reservePx: これから広がる余白（集合住宅の部屋操作欄ぶん）を前もって見込む。
+    function fitPopupInView(marker, reservePx) {
+        const popup = marker.getPopup();
+        if (!popup || !popup.isOpen()) return;
+        const el = popup.getElement();
+        const content = el ? el.querySelector('.popup-content') : null;
+        const mapH = map.getContainer().clientHeight;
+        const pad = 12, tip = 28; // 吹き出しの吹き出し口ぶんの余白
+        let popupH = (content ? content.getBoundingClientRect().height : mapH * 0.4) + (reservePx || 0);
+        popupH = Math.min(popupH, mapH * 0.62); // 吹き出しは最大でも約60vh（中はスクロール）
+        // ピンの画面Y = mapH/2 + oy。吹き出しは上方向に伸びるので、その上端が画面内に収まるoyを求める。
+        let oy = (popupH + tip + pad) - mapH / 2;
+        oy = Math.max(mapH * 0.10, Math.min(oy, mapH / 2 - pad)); // 下げ過ぎ（ピンが画面外）も防ぐ
+        map.easeTo({ center: marker.getLngLat(), offset: [0, oy], duration: 300 });
     }
 
     // 部屋セルの見た目（状態に応じた色・文字）。未訪問は既定色のまま。落ち着いたトーンに調整。
@@ -353,6 +375,22 @@
         document.getElementById('legend-panel').classList.toggle('show');
     }
 
+    // ── 処理中インジケーター（サーバー通信中に「動いている」ことを示す） ──
+    function showBusy(msg) {
+        let el = document.getElementById('busy-indicator');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'busy-indicator';
+            document.body.appendChild(el);
+        }
+        el.innerHTML = '<span class="spinner"></span>' + (msg || '更新中…');
+        el.style.display = 'flex';
+    }
+    function hideBusy() {
+        const el = document.getElementById('busy-indicator');
+        if (el) el.style.display = 'none';
+    }
+
     // ピンが多いときは画面内だけ描画して負荷を抑える（少なければ全件表示）
     const MAX_RENDER_ALL = 200;
     let limitedMode = false;
@@ -386,6 +424,21 @@
         return { char: '📍', color: '#6FAEC0' }; // 未訪問
     }
 
+    // 戸建てマーカー要素に見た目（文字・色・☆形）を適用する。新規描画とその場更新の両方で使う。
+    function styleKodateMarker(markerEl, item) {
+        markerEl.className = 'custom-marker marker-kodedate';
+        const kv = kodateVisual(item);
+        markerEl.innerHTML = kv.char;
+        markerEl.style.background = '';
+        if (kv.star) {
+            markerEl.classList.add('marker-star'); // ☆形：塗り＝属性色／白文字
+            markerEl.style.background = kv.color;
+            markerEl.style.color = '#fff';
+        } else {
+            markerEl.style.color = kv.color;
+        }
+    }
+
     map.on('load', () => { /* データ取得はサインイン成功後（handleCredential）に行う */ });
 
     // 入力フォームや詳細ポップアップが開いていれば閉じる。閉じたものがあれば true を返す。
@@ -404,9 +457,12 @@
     let touchStartPt = null;
 
     // ① 通常タップ/左クリック時 -> 何か開いていればキャンセル、無ければ戸建ての新規登録
-    //   ダブルタップ（ズーム）と区別するため、少し待ってから登録フォームを開く。
-    //   その間に dblclick が来たら登録をキャンセルし、地図の既定ズームに任せる。
+    //   ダブルタップ（ズーム）対策：
+    //   ・前回タップから DOUBLE_TAP_MS 以内の2回目タップは「ダブルタップ」とみなし、登録を発火させない。
+    //   ・1回目タップも DOUBLE_TAP_MS 待ってから登録を開く（その間に2回目が来たらキャンセル）。
     let singleTapTimer = null;
+    let lastTapTime = 0;
+    const DOUBLE_TAP_MS = 300;
     map.on('click', (e) => {
         // ピンチ・パン由来のクリックは無視する
         if (tapSuppressed) { tapSuppressed = false; return; }
@@ -415,13 +471,21 @@
             typeof e.originalEvent.target.className === 'string' &&
             e.originalEvent.target.className.includes('mapboxgl-canvas');
         if (!onCanvas) return;
-        if (closeOpenForms()) return; // 開いていれば閉じるだけ（別地点を指定しない）
+        if (closeOpenForms()) { lastTapTime = 0; return; } // 開いていれば閉じるだけ
+        const now = Date.now();
+        // 直前タップとの間隔が短い＝ダブルタップ。登録をキャンセルしてズームに任せる。
+        if (now - lastTapTime < DOUBLE_TAP_MS) {
+            clearTimeout(singleTapTimer);
+            lastTapTime = 0;
+            return;
+        }
+        lastTapTime = now;
         const lngLat = e.lngLat;
         clearTimeout(singleTapTimer);
-        singleTapTimer = setTimeout(() => { handleMapClickOrTap(lngLat, '戸建て'); }, 280);
+        singleTapTimer = setTimeout(() => { handleMapClickOrTap(lngLat, '戸建て'); }, DOUBLE_TAP_MS);
     });
     // ダブルタップ（ズーム）時は新規登録を発火させない
-    map.on('dblclick', () => { clearTimeout(singleTapTimer); });
+    map.on('dblclick', () => { clearTimeout(singleTapTimer); lastTapTime = 0; });
 
     // ② 長押し/右クリック時 -> 何か開いていればキャンセル、無ければ集合住宅の新規登録
     map.on('contextmenu', (e) => {
@@ -719,22 +783,19 @@
                 markerEl.style.border = '3px solid ' + (getAutolock(firstItem) === 'あり' ? '#A8554E' : '#4A78B0');
                 popupHtml += createShugaViewHtml(items);
             } else {
-                markerEl.className += ' marker-kodedate';
-                const kv = kodateVisual(firstItem);
-                markerEl.innerHTML = kv.char;
-                if (kv.star) {
-                    // ☆形マーカー：塗りつぶし＝属性色／白文字
-                    markerEl.classList.add('marker-star');
-                    markerEl.style.background = kv.color;
-                    markerEl.style.color = '#fff';
-                } else {
-                    markerEl.style.color = kv.color;
-                }
+                styleKodateMarker(markerEl, firstItem);
                 popupHtml += createKodedateViewHtml(firstItem);
             }
             popupHtml += `</div>`;
 
             const popup = new mapboxgl.Popup({ offset: 25, closeOnClick: false, maxWidth: 'none', anchor: 'bottom', focusAfterOpen: false }).setHTML(popupHtml);
+
+            const isShuga = (firstItem.種別 === '集合住宅');
+            // 吹き出しが開いたら、実高さを測ってピン＋吹き出しが画面に収まるよう寄せる。
+            // 集合住宅は後から部屋操作欄が広がるぶん(約140px)を見込む。
+            popup.on('open', () => fitPopupInView(marker, isShuga ? 140 : 0));
+            // 吹き出しを閉じたら、選択中の部屋ハイライトを消し、操作欄を初期表示に戻す（選択状態を解除）
+            popup.on('close', () => resetRoomActionPanel(popup));
 
             // 【数値保証】グループ化時にパース済みの数値座標 [lng, lat] でマーカーを作成
             const marker = new mapboxgl.Marker(markerEl)
@@ -745,12 +806,12 @@
             marker._rowNumber = firstItem.rowNumber;            // 部屋更新時にポップアップを特定する用
 
             // このマーカーを開くときは、新規フォームや他の開いているポップアップを閉じる
+            // （寄せる処理は popup の 'open' イベントで実高さを測って行う）
             markerEl.addEventListener('click', () => {
                 if (activeNewMarker) { activeNewMarker.remove(); activeNewMarker = null; }
                 currentMarkers.forEach(other => {
                     if (other !== marker) { const op = other.getPopup(); if (op && op.isOpen()) other.togglePopup(); }
                 });
-                centerForPopup(marker.getLngLat());
             });
             currentMarkers.push(marker);
           } catch (err) {
@@ -847,7 +908,7 @@
                 管理人: ${first.管理人} ｜ 構成: ${first.属性} ｜ オートロック: ${getAutolock(first)}
             </div>
             ${gridHtml}
-            <div id="room-action-area" style="margin-top:8px; display:none; border:1px solid #6FAEC0; padding:6px; background:#f0f7f9;"></div>
+            <div id="room-action-area" style="margin-top:8px; border:1px solid #6FAEC0; padding:6px; background:#f0f7f9;">${roomActionPlaceholder()}</div>
 
             <div class="memo-section">
                 <label style="font-size:11px; font-weight:bold;">メモ</label>
@@ -963,6 +1024,20 @@
         }
     }
 
+    // 部屋未選択時の操作欄プレースホルダ（部屋を選ぶ前から欄を表示しておく）
+    function roomActionPlaceholder() {
+        return '<div style="font-size:11px; color:#888; text-align:center; padding:6px 2px;">🚪 部屋をタップして操作してください</div>';
+    }
+
+    // 吹き出しを閉じたときに、部屋の選択ハイライトと操作欄を初期状態へ戻す（選択状態を解除）
+    function resetRoomActionPanel(popup) {
+        const root = (popup && popup.getElement) ? popup.getElement() : null;
+        if (!root) return;
+        root.querySelectorAll('.cell-operating').forEach(el => el.classList.remove('cell-operating'));
+        const area = root.querySelector('#room-action-area');
+        if (area) area.innerHTML = roomActionPlaceholder();
+    }
+
     function showRoomAction(buildingRow, roomNum, cellEl) {
         // 操作中のセルをハイライト（どこを操作しているか分かるように）
         document.querySelectorAll('.cell-operating').forEach(el => el.classList.remove('cell-operating'));
@@ -980,32 +1055,41 @@
             } catch(e){}
         }
 
-        const hideNum = item && String(item.部屋番号非表示) === '1';
-        const title = hideNum ? '🚪 部屋の操作' : `🚪 ${roomNum}号室の操作`;
+        // この部屋の現在値（属性 or 訪問結果）。属性の選択肢に現在値を反映するために使う。
+        let curRoomVal = '';
+        try { curRoomVal = (JSON.parse((item && item.部屋ステータス) || '{}') || {})[roomNum] || ''; } catch(e){}
+        const stSel = (v) => curRoomVal === v ? 'selected' : '';
 
+        const hideNum = item && String(item.部屋番号非表示) === '1';
+        const title = hideNum ? '🚪 部屋' : `🚪 ${roomNum}号室`;
+
+        // レイアウトは戸建ての詳細（inline-group：ラベル左・セレクト右）に合わせる
         const html = `
-            <div style="font-weight:bold; margin-bottom:4px; font-size:12px;">${title}</div>
-            <label style="font-size:10px; font-weight:bold;">訪問結果</label>
-            <select style="width:100%; font-size:11px; padding:2px;" onchange="saveRoomStatus(${buildingRow}, ${roomNum}, this.value)">
-                <option value="">-- 選択 --</option>
-                <option value="不在">不在</option>
-                <option value="会えた">会えた</option>
-                <option value="投函">投函</option>
-            </select>
-            <label style="font-size:10px; font-weight:bold; margin-top:4px; display:block;">属性</label>
-            <select style="width:100%; font-size:11px; padding:2px;" onchange="saveRoomState(${buildingRow}, ${roomNum}, this.value)">
-                <option value="">-- 変更なし --</option>
-                <option value="未訪問">訪問可</option>
-                <option value="訪問拒否">訪問拒否</option>
-                <option value="外国語">外国語</option>
-                <option value="空き家">空き家</option>
-            </select>
+            <div style="font-weight:bold; margin-bottom:6px; font-size:12px;">${title}</div>
+            <div class="inline-group">
+                <label>訪問結果</label>
+                <select onchange="saveRoomStatus(${buildingRow}, ${roomNum}, this.value)">
+                    <option value="">-- 選択 --</option>
+                    <option value="不在">不在</option>
+                    <option value="会えた">会えた</option>
+                    <option value="投函">投函</option>
+                </select>
+            </div>
+            <div class="inline-group">
+                <label>属性</label>
+                <select style="background:#ececec;" onchange="saveRoomState(${buildingRow}, ${roomNum}, this.value)">
+                    <option value="">-- 変更なし --</option>
+                    <option value="未訪問" ${stSel('未訪問')}>訪問可</option>
+                    <option value="訪問拒否" ${stSel('訪問拒否')}>訪問拒否</option>
+                    <option value="外国語" ${stSel('外国語')}>外国語</option>
+                    <option value="空き家" ${stSel('空き家')}>空き家</option>
+                </select>
+            </div>
             <div style="font-weight:bold; font-size:10px; margin-top:4px;">部屋の履歴:</div>
-            <div style="max-height:40px; overflow-y:auto; background:white; padding:2px; border:1px solid #ccc;">${historyHtml || '履歴なし'}</div>
+            <div style="max-height:40px; overflow-y:auto; background:white; padding:2px; border:1px solid #ccc;">${historyHtml || '<div style="font-size:10px; color:#aaa;">履歴なし</div>'}</div>
         `;
         const area = document.getElementById('room-action-area');
-        area.innerHTML = html;
-        area.style.display = 'block';
+        if (area) area.innerHTML = html;
     }
 
     // 「不在」を選ぶと現在の状況から不在回数を1つ繰り上げる
@@ -1017,6 +1101,23 @@
         return '不在(1回目)';
     }
 
+    // 戸建ての更新を、ポップアップを閉じずにマーカーの色・吹き出し内容だけ最新化する。
+    function applyKodateChange(rowNumber) {
+        return (latest) => {
+            currentData = latest;
+            const item = currentData.find(d => d.rowNumber === rowNumber);
+            const marker = currentMarkers.find(m => m._rowNumber === rowNumber);
+            const popup = marker ? marker.getPopup() : null;
+            if (item && marker && popup) {
+                styleKodateMarker(marker.getElement(), item); // ピンの色・形を更新
+                applyZoomScale();                             // ☆⇔○でサイズが変わるため再調整
+                popup.setHTML('<div class="popup-content">' + createKodedateViewHtml(item) + '</div>');
+            } else {
+                renderMarkers(latest); // フォールバック
+            }
+        };
+    }
+
     function saveStatus(rowNumber, val) {
         if(!val) return;
         let status = val;
@@ -1024,11 +1125,14 @@
             const item = currentData.find(d => d.rowNumber === rowNumber);
             status = nextAbsence(item ? item.最新ステータス : '');
         }
-        apiCall('updateLocation', { rowNumber: rowNumber, status: status, memoText: null, isClearMemo: false }).then(renderMarkers).catch(handleServerError);
+        showBusy('更新中…');
+        apiCall('updateLocation', { rowNumber: rowNumber, status: status, memoText: null, isClearMemo: false })
+            .then(applyKodateChange(rowNumber)).catch(handleServerError).finally(hideBusy);
     }
 
     // 部屋の更新を、ポップアップを閉じずにグリッドの色・履歴だけ最新化する
     function applyRoomChange(buildingRow, roomNum, finalStatus, addHistory) {
+        showBusy('更新中…');
         apiCall('updateRoom', { buildingRow: buildingRow, roomNum: roomNum, status: finalStatus, addHistory: addHistory }).then((latest) => {
             currentData = latest;
             const item = currentData.find(d => d.rowNumber === buildingRow);
@@ -1043,7 +1147,7 @@
             } else {
                 renderMarkers(latest); // フォールバック
             }
-        }).catch(handleServerError);
+        }).catch(handleServerError).finally(hideBusy);
     }
 
     function saveRoomStatus(buildingRow, roomNum, val) {
@@ -1058,15 +1162,18 @@
         applyRoomChange(buildingRow, roomNum, status, true);
     }
 
-    // 属性（通常/訪問拒否/外国語/空き家）の更新。J列を更新し、履歴には残さない。
+    // 属性（通常/訪問拒否/外国語/空き家）の更新。J列を更新し、操作ログも履歴に残す。
     function saveAttribute(rowNumber, attribute) {
         if(!attribute) return;
-        apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: null, isClearMemo: false, addHistory: false, attribute: attribute }).then(renderMarkers).catch(handleServerError);
+        showBusy('更新中…');
+        apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: null, isClearMemo: false, addHistory: true, attribute: attribute })
+            .then(applyKodateChange(rowNumber)).catch(handleServerError).finally(hideBusy);
     }
 
+    // 部屋の属性（訪問可/訪問拒否/外国語/空き家）の更新。操作ログも履歴に残す（addHistory=true）。
     function saveRoomState(buildingRow, roomNum, state) {
         if(!state) return;
-        applyRoomChange(buildingRow, roomNum, state, false);
+        applyRoomChange(buildingRow, roomNum, state, true);
     }
 
     // ピン（地点）の削除。実行前に必ず確認する
