@@ -31,9 +31,9 @@
         .form-group label { display: block; font-size: 11px; font-weight: bold; margin-bottom: 2px; }
         .form-group input, .form-group select, .form-group textarea { width: 100%; box-sizing: border-box; padding: 4px; font-size: 12px; }
         .btn-row { display: flex; gap: 4px; margin-top: 6px; }
-        .submit-btn { flex: 1; padding: 6px; background: #3FB1CE; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; }
-        .clear-btn { background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
-        .save-btn { background: #2ecc71; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        .submit-btn { flex: 1; padding: 6px; background: #5E9DB8; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; }
+        .clear-btn { background: #C75F56; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        .save-btn { background: #5FA97D; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
 
         /* グリッド（表）スタイル */
         .grid-table { width: 100%; border-collapse: collapse; margin-top: 6px; text-align: center; font-size: 11px; }
@@ -41,20 +41,24 @@
         .grid-table th { background: #f4f4f4; }
         /* 階ラベル（左端）: 狭く・濃色・反転 */
         .grid-floor { background: #2c3e50; color: #fff; font-weight: bold; width: 22px; min-width: 22px; padding: 2px 0; font-size: 10px; position: sticky; left: 0; }
-        .cell-active { background-color: #e0f7fa; cursor: pointer; font-weight: bold; }
+        .cell-active { background-color: #E6F1F4; cursor: pointer; font-weight: bold; }
         .cell-inactive { background-color: #eaeaea; color: #aaa; }
         /* 操作中の部屋セルを目立たせる */
-        .cell-operating { outline: 3px solid #ff5722; outline-offset: -3px; }
+        .cell-operating { outline: 3px solid #E07A4E; outline-offset: -3px; }
         
         /* 履歴・メモスタイル */
         .history-box { min-height: 48px; max-height: 80px; overflow-y: auto; background: #f9f9f9; border: 1px solid #ddd; padding: 4px; margin-top: 4px; font-size: 11px; }
         .history-item { border-bottom: 1px dashed #eee; padding: 2px 0; }
         .memo-section { margin-top: 8px; border-top: 1px solid #ddd; padding-top: 6px; }
 
-        /* マーカー（ピン）の見た目 */
+        /* マーカー（ピン）の見た目（サイズはJSのapplyZoomScaleで動的調整） */
         .custom-marker { display: flex; justify-content: center; align-items: center; font-weight: bold; border-radius: 50%; cursor: pointer; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
-        .marker-kodedate { width: 28px; height: 28px; font-size: 15px; border: 2px solid #333; }
-        .marker-shuga { width: 32px; height: 32px; font-size: 18px; background: #3FB1CE; border: 2px solid white; border-radius: 6px; }
+        .marker-kodedate { width: 24px; height: 24px; font-size: 13px; border: 2px solid #333; }
+        .marker-shuga { width: 28px; height: 28px; font-size: 16px; background: #6FAEC0; border: 2px solid white; border-radius: 6px; }
+        /* 戸建ての「訪問拒否(拒)」「外国語(外)」は外枠を☆形にする（塗り＝属性色／白文字） */
+        .marker-star { border: none !important; border-radius: 0 !important; box-shadow: none !important; background: transparent;
+            clip-path: polygon(50% 2%, 61% 35%, 96% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 4% 35%, 39% 35%);
+            filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.4)); }
 
         /* ── 文字サイズボタン（右下） ── */
         #scale-btn { position: absolute; bottom: 10px; right: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
@@ -117,25 +121,30 @@
 <div id="legend-panel">
     <div style="font-weight:bold; margin-bottom:6px; font-size:12px;">🗺 凡例</div>
     <div style="font-weight:bold; font-size:10px; color:#666; margin-bottom:2px;">── 戸建てマーカー ──</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#3FB1CE; border-radius:50%;">📍</span>未訪問</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:black; border-radius:50%;">1</span>不在(1回目)</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:blue; border-radius:50%;">2</span>不在(2回目)</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:black; border-radius:50%;">3</span>不在(3回目)</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:red; border-radius:50%;">会</span>会えた</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:green; border-radius:50%;">□</span>投函</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:red; border-radius:50%;">拒</span>訪問拒否（属性）</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#8e44ad; border-radius:50%;">外</span>外国語（属性）</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:gray; border-radius:50%;">空</span>空き家（属性）</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#6FAEC0; border-radius:50%;">📍</span>未訪問</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#333; border-radius:50%;">1</span>不在(1回目)</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#4A78B0; border-radius:50%;">2</span>不在(2回目)</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#333; border-radius:50%;">3</span>不在(3回目)</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#DB7C2E; border-radius:50%;">会</span>会えた</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#3E8E54; border-radius:50%;">□</span>投函</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#B0554D; color:#fff; clip-path:polygon(50% 2%,61% 35%,96% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,4% 35%,39% 35%);">拒</span>訪問拒否（☆・属性）</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; color:#fff; clip-path:polygon(50% 2%,61% 35%,96% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,4% 35%,39% 35%);">外</span>外国語（☆・属性）</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#8C8C8C; border-radius:50%;">空</span>空き家（属性）</div>
+    <div style="font-weight:bold; font-size:10px; color:#666; margin:6px 0 2px;">── 集合住宅ピン（構成属性）──</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#D98E5B; border-radius:4px;"></span>ファミリー</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#5B8BB0; border-radius:4px;"></span>シングル</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; border-radius:4px;"></span>混在</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#6FAEC0; border-radius:4px;"></span>不明</div>
     <div style="font-weight:bold; font-size:10px; color:#666; margin:6px 0 2px;">── 集合住宅セル ──</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#e0f7fa; border:1px solid #ccc;"></span>未訪問</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#b3e5fc; border:1px solid #ccc; color:#0d3c55;">1</span>不在(1回目)</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#81d4fa; border:1px solid #ccc; color:#0d3c55;">2</span>不在(2回目)</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#4fc3f7; border:1px solid #ccc; color:#06283d;">3</span>不在(3回目)</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#ffcc80; border:1px solid #ccc; color:#5b3b00;">会</span>会えた</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#c8e6c9; border:1px solid #ccc; color:#1b5e20;">□</span>投函</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#9E2B25; border:1px solid #ccc; color:#fff;">拒</span>訪問拒否（属性）</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#8e44ad; border:1px solid #ccc; color:#fff;">外</span>外国語（属性）</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#cfcfcf; border:1px solid #ccc; color:#555;">空</span>空き家（属性）</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#E6F1F4; border:1px solid #ccc;"></span>未訪問</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#CBE3F0; border:1px solid #ccc; color:#0d3c55;">1</span>不在(1回目)</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#A6CFE4; border:1px solid #ccc; color:#0d3c55;">2</span>不在(2回目)</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#7FB6D6; border:1px solid #ccc; color:#0d3c55;">3</span>不在(3回目)</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#F2C892; border:1px solid #ccc; color:#5b3b00;">会</span>会えた</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#CBE2CC; border:1px solid #ccc; color:#2E5E33;">□</span>投函</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#A8554E; border:1px solid #ccc; color:#fff;">拒</span>訪問拒否（属性）</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; border:1px solid #ccc; color:#fff;">外</span>外国語（属性）</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#D4D4D4; border:1px solid #ccc; color:#555;">空</span>空き家（属性）</div>
 </div>
 
 <script>
@@ -249,7 +258,8 @@
         container: 'map',
         style: 'mapbox://styles/mapbox/streets-v12',
         center: [139.89036779018497, 35.72063279470909], // 既定の中心位置
-        zoom: 16
+        zoom: 16,
+        bearingSnap: 24 // 北付近の小さな（意図しない）回転は指を離すと北に戻す＝誤回転を抑制
     });
 
     // 右上にコンパス（クリックで北が上に戻る）
@@ -260,13 +270,13 @@
     let gridActiveRooms = [];
     let currentData = []; // 直近にサーバーから受け取ったデータ（編集機能で参照）
 
-    // 集合住宅ピンの色（構成属性で見分ける）
+    // 集合住宅ピンの色（構成属性で見分ける／落ち着いたトーン）
     function shugaColor(attr) {
         switch (attr) {
-            case 'ファミリー': return '#e67e22'; // オレンジ
-            case 'シングル':   return '#2980b9'; // ブルー
-            case '混在':       return '#8e44ad'; // パープル
-            default:           return '#3FB1CE'; // 不明など（既定）
+            case 'ファミリー': return '#D98E5B'; // オレンジ（落ち着いたテラコッタ）
+            case 'シングル':   return '#5B8BB0'; // ブルー（くすみ）
+            case '混在':       return '#8E79AB'; // パープル（くすみ）
+            default:           return '#6FAEC0'; // 不明など（既定・くすみティール）
         }
     }
 
@@ -290,22 +300,22 @@
         map.easeTo({ center: lngLat, offset: [0, h * 0.2], duration: 300 });
     }
 
-    // 部屋セルの見た目（状態に応じた色・文字）。未訪問は既定色のまま。
+    // 部屋セルの見た目（状態に応じた色・文字）。未訪問は既定色のまま。落ち着いたトーンに調整。
     function roomVisual(status) {
         status = status || '';
-        if (status.indexOf('不在(1回目)') >= 0) return { char: '1', bg: '#b3e5fc', color: '#0d3c55' }; // 少し濃く
-        if (status.indexOf('不在(2回目)') >= 0) return { char: '2', bg: '#81d4fa', color: '#0d3c55' }; // さらに濃く
-        if (status.indexOf('不在(3回目)') >= 0) return { char: '3', bg: '#4fc3f7', color: '#06283d' }; // もっと濃く
-        if (status.indexOf('会えた')     >= 0) return { char: '会', bg: '#ffcc80', color: '#5b3b00' }; // 目に優しいオレンジ
-        if (status.indexOf('投函')       >= 0) return { char: '□', bg: '#c8e6c9', color: '#1b5e20' };
-        if (status.indexOf('訪問拒否')   >= 0) return { char: '拒', bg: '#9E2B25', color: '#ffffff' }; // えんじ色
-        if (status.indexOf('外国語')     >= 0) return { char: '外', bg: '#8e44ad', color: '#ffffff' }; // 紫
-        if (status.indexOf('空き家')     >= 0) return { char: '空', bg: '#cfcfcf', color: '#555555' };
-        return { char: null, bg: '#e0f7fa', color: '#333333' }; // 未訪問（既定）
+        if (status.indexOf('不在(1回目)') >= 0) return { char: '1', bg: '#CBE3F0', color: '#0d3c55' }; // 少し濃く
+        if (status.indexOf('不在(2回目)') >= 0) return { char: '2', bg: '#A6CFE4', color: '#0d3c55' }; // さらに濃く
+        if (status.indexOf('不在(3回目)') >= 0) return { char: '3', bg: '#7FB6D6', color: '#0d3c55' }; // もっと濃く
+        if (status.indexOf('会えた')     >= 0) return { char: '会', bg: '#F2C892', color: '#5b3b00' }; // 目に優しいオレンジ
+        if (status.indexOf('投函')       >= 0) return { char: '□', bg: '#CBE2CC', color: '#2E5E33' };
+        if (status.indexOf('訪問拒否')   >= 0) return { char: '拒', bg: '#A8554E', color: '#ffffff' }; // くすみブリック
+        if (status.indexOf('外国語')     >= 0) return { char: '外', bg: '#8E79AB', color: '#ffffff' }; // くすみパープル
+        if (status.indexOf('空き家')     >= 0) return { char: '空', bg: '#D4D4D4', color: '#555555' };
+        return { char: null, bg: '#E6F1F4', color: '#333333' }; // 未訪問（既定）
     }
 
-    // 広域表示（ズームがこの値未満）のときは戸建てを隠す（2段階アップ: 16→18）
-    const KODATE_HIDE_BELOW_ZOOM = 18;
+    // 広域表示（ズームがこの値未満）のときは戸建てを隠す
+    const KODATE_HIDE_BELOW_ZOOM = 17;
     function applyZoomVisibility() {
         const zoom = map.getZoom();
         const showKodate = zoom >= KODATE_HIDE_BELOW_ZOOM;
@@ -317,6 +327,7 @@
     map.on('zoomend', applyZoomVisibility);
 
     // ズームレベルに応じてマーカーサイズを動的に変える（広域ほど小さく）
+    // ベースサイズは全体的に1段階小さめ。☆形は本体が小さいため少し大きめ＆文字は控えめに。
     function applyZoomScale() {
         const zoom = map.getZoom();
         // zoom17以上=100%, 16=85%, 15=70%, それ以下=55%
@@ -325,11 +336,12 @@
         currentMarkers.forEach(m => {
             const el = m.getElement();
             if (el.classList.contains('marker-kodedate')) {
-                const base = isLarge ? { w: 40, f: 22 } : { w: 28, f: 15 };
-                el.style.width = el.style.height = Math.round(base.w * scale) + 'px';
-                el.style.fontSize = Math.round(base.f * scale) + 'px';
+                const base = isLarge ? { w: 34, f: 19 } : { w: 24, f: 13 };
+                const star = el.classList.contains('marker-star');
+                el.style.width = el.style.height = Math.round(base.w * scale * (star ? 1.2 : 1)) + 'px';
+                el.style.fontSize = Math.round(base.f * scale * (star ? 0.9 : 1)) + 'px';
             } else if (el.classList.contains('marker-shuga')) {
-                const base = isLarge ? { w: 44, f: 24 } : { w: 32, f: 18 };
+                const base = isLarge ? { w: 38, f: 21 } : { w: 28, f: 16 };
                 el.style.width = el.style.height = Math.round(base.w * scale) + 'px';
                 el.style.fontSize = Math.round(base.f * scale) + 'px';
             }
@@ -356,21 +368,22 @@
     });
 
     // 戸建てピンの見た目（属性＝拒否/外国語/空き家 を優先、なければ訪問結果）
+    // star:true のものは○ではなく☆形マーカー（塗り＝color／白文字）で描画する。
     function kodateVisual(item) {
         const attr = item.属性;
-        if (attr === '訪問拒否') return { char: '拒', color: 'red' };
-        if (attr === '外国語')   return { char: '外', color: '#8e44ad' };
-        if (attr === '空き家')   return { char: '空', color: 'gray' };
+        if (attr === '訪問拒否') return { char: '拒', color: '#B0554D', star: true };
+        if (attr === '外国語')   return { char: '外', color: '#8E79AB', star: true };
+        if (attr === '空き家')   return { char: '空', color: '#8C8C8C' };
         const s = item.最新ステータス;
-        if (s === '不在(1回目)') return { char: '1', color: 'black' };
-        if (s === '不在(2回目)') return { char: '2', color: 'blue' };
-        if (s === '不在(3回目)') return { char: '3', color: 'black' };
-        if (s === '会えた')      return { char: '会', color: 'red' };
-        if (s === '投函')        return { char: '□', color: 'green' };
-        if (s === '訪問拒否')    return { char: '拒', color: 'red' };
-        if (s === '外国語')      return { char: '外', color: '#8e44ad' };
-        if (s === '空き家')      return { char: '空', color: 'gray' };
-        return { char: '📍', color: '#3FB1CE' }; // 未訪問
+        if (s === '不在(1回目)') return { char: '1', color: '#333333' };
+        if (s === '不在(2回目)') return { char: '2', color: '#4A78B0' };
+        if (s === '不在(3回目)') return { char: '3', color: '#333333' };
+        if (s === '会えた')      return { char: '会', color: '#DB7C2E' }; // オレンジ
+        if (s === '投函')        return { char: '□', color: '#3E8E54' };
+        if (s === '訪問拒否')    return { char: '拒', color: '#B0554D', star: true };
+        if (s === '外国語')      return { char: '外', color: '#8E79AB', star: true };
+        if (s === '空き家')      return { char: '空', color: '#8C8C8C' };
+        return { char: '📍', color: '#6FAEC0' }; // 未訪問
     }
 
     map.on('load', () => { /* データ取得はサインイン成功後（handleCredential）に行う */ });
@@ -391,6 +404,9 @@
     let touchStartPt = null;
 
     // ① 通常タップ/左クリック時 -> 何か開いていればキャンセル、無ければ戸建ての新規登録
+    //   ダブルタップ（ズーム）と区別するため、少し待ってから登録フォームを開く。
+    //   その間に dblclick が来たら登録をキャンセルし、地図の既定ズームに任せる。
+    let singleTapTimer = null;
     map.on('click', (e) => {
         // ピンチ・パン由来のクリックは無視する
         if (tapSuppressed) { tapSuppressed = false; return; }
@@ -400,8 +416,12 @@
             e.originalEvent.target.className.includes('mapboxgl-canvas');
         if (!onCanvas) return;
         if (closeOpenForms()) return; // 開いていれば閉じるだけ（別地点を指定しない）
-        handleMapClickOrTap(e.lngLat, '戸建て');
+        const lngLat = e.lngLat;
+        clearTimeout(singleTapTimer);
+        singleTapTimer = setTimeout(() => { handleMapClickOrTap(lngLat, '戸建て'); }, 280);
     });
+    // ダブルタップ（ズーム）時は新規登録を発火させない
+    map.on('dblclick', () => { clearTimeout(singleTapTimer); });
 
     // ② 長押し/右クリック時 -> 何か開いていればキャンセル、無ければ集合住宅の新規登録
     map.on('contextmenu', (e) => {
@@ -504,7 +524,7 @@
         formHtml += `</div>`;
 
         const popup = new mapboxgl.Popup({ offset: 25, closeOnClick: false, maxWidth: 'none', anchor: 'bottom', focusAfterOpen: false }).setHTML(formHtml);
-        activeNewMarker = new mapboxgl.Marker({ color: forcedType === '戸建て' ? '#f1c40f' : '#e74c3c' })
+        activeNewMarker = new mapboxgl.Marker({ color: forcedType === '戸建て' ? '#E0A93C' : '#C75F56' })
             .setLngLat([lngVal, latVal])
             .setPopup(popup)
             .addTo(map);
@@ -539,7 +559,7 @@
                 const roomNum = f * 100 + r;
                 const active = gridActiveRooms.includes(roomNum);
                 const label = hideNum ? '' : String(f * 100 + r);
-                html += `<td id="setup-rm-${roomNum}" onclick="toggleSetupRoom(${roomNum})" style="min-width:30px; background:${active ? '#2ecc71' : '#fff'}; color:${active ? '#fff' : '#333'}; cursor:pointer;">${label}</td>`;
+                html += `<td id="setup-rm-${roomNum}" onclick="toggleSetupRoom(${roomNum})" style="min-width:30px; background:${active ? '#5FA97D' : '#fff'}; color:${active ? '#fff' : '#333'}; cursor:pointer;">${label}</td>`;
             }
             html += `</tr>`;
         }
@@ -565,7 +585,7 @@
             el.style.background = '#fff'; el.style.color = '#333';
         } else {
             gridActiveRooms.push(roomNum);
-            el.style.background = '#2ecc71'; el.style.color = '#fff';
+            el.style.background = '#5FA97D'; el.style.color = '#fff';
         }
     }
 
@@ -633,7 +653,7 @@
             el.style.cssText = 'position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:9999; padding:8px 14px; border-radius:6px; font-size:13px; box-shadow:0 2px 6px rgba(0,0,0,0.3); max-width:90%; text-align:center;';
             document.body.appendChild(el);
         }
-        el.style.background = isError ? '#e74c3c' : '#2ecc71';
+        el.style.background = isError ? '#C75F56' : '#5FA97D';
         el.style.color = '#fff';
         el.textContent = msg;
         el.style.display = 'block';
@@ -695,14 +715,21 @@
                 markerEl.innerHTML = units > 12 ? '🏢' : '🏘️';
                 // 背景＝構成属性（ファミリー/シングル等）で色分け
                 markerEl.style.background = shugaColor(firstItem.属性);
-                // 枠＝オートロック（あり=えんじ色 / なし=青）
-                markerEl.style.border = '3px solid ' + (getAutolock(firstItem) === 'あり' ? '#9E2B25' : '#1565C0');
+                // 枠＝オートロック（あり=くすみブリック / なし=くすみブルー）
+                markerEl.style.border = '3px solid ' + (getAutolock(firstItem) === 'あり' ? '#A8554E' : '#4A78B0');
                 popupHtml += createShugaViewHtml(items);
             } else {
                 markerEl.className += ' marker-kodedate';
                 const kv = kodateVisual(firstItem);
                 markerEl.innerHTML = kv.char;
-                markerEl.style.color = kv.color;
+                if (kv.star) {
+                    // ☆形マーカー：塗りつぶし＝属性色／白文字
+                    markerEl.classList.add('marker-star');
+                    markerEl.style.background = kv.color;
+                    markerEl.style.color = '#fff';
+                } else {
+                    markerEl.style.color = kv.color;
+                }
                 popupHtml += createKodedateViewHtml(firstItem);
             }
             popupHtml += `</div>`;
@@ -752,11 +779,11 @@
             <div class="building-title">${item['建物名 / 世帯名'] || '戸建て'}</div>
             <div class="inline-group">
                 <label>属性</label>
-                <select onchange="saveAttribute(${item.rowNumber}, this.value)">
+                <select style="background:#ececec;" onchange="saveAttribute(${item.rowNumber}, this.value)">
                     <option value="通常" ${normalSel}>訪問可</option>
-                    <option value="訪問拒否" ${sel('訪問拒否')}>訪問拒否 拒</option>
-                    <option value="外国語" ${sel('外国語')}>外国語 外</option>
-                    <option value="空き家" ${sel('空き家')}>空き家 空</option>
+                    <option value="訪問拒否" ${sel('訪問拒否')}>訪問拒否</option>
+                    <option value="外国語" ${sel('外国語')}>外国語</option>
+                    <option value="空き家" ${sel('空き家')}>空き家</option>
                 </select>
             </div>
             <div class="inline-group">
@@ -820,7 +847,7 @@
                 管理人: ${first.管理人} ｜ 構成: ${first.属性} ｜ オートロック: ${getAutolock(first)}
             </div>
             ${gridHtml}
-            <div id="room-action-area" style="margin-top:8px; display:none; border:1px solid #3FB1CE; padding:6px; background:#f0f7f9;"></div>
+            <div id="room-action-area" style="margin-top:8px; display:none; border:1px solid #6FAEC0; padding:6px; background:#f0f7f9;"></div>
 
             <div class="memo-section">
                 <label style="font-size:11px; font-weight:bold;">メモ</label>
@@ -958,20 +985,20 @@
 
         const html = `
             <div style="font-weight:bold; margin-bottom:4px; font-size:12px;">${title}</div>
-            <label style="font-size:10px; font-weight:bold;">訪問結果（履歴に残る）</label>
+            <label style="font-size:10px; font-weight:bold;">訪問結果</label>
             <select style="width:100%; font-size:11px; padding:2px;" onchange="saveRoomStatus(${buildingRow}, ${roomNum}, this.value)">
                 <option value="">-- 選択 --</option>
                 <option value="不在">不在</option>
                 <option value="会えた">会えた</option>
                 <option value="投函">投函</option>
             </select>
-            <label style="font-size:10px; font-weight:bold; margin-top:4px; display:block;">属性（履歴に残さない）</label>
+            <label style="font-size:10px; font-weight:bold; margin-top:4px; display:block;">属性</label>
             <select style="width:100%; font-size:11px; padding:2px;" onchange="saveRoomState(${buildingRow}, ${roomNum}, this.value)">
                 <option value="">-- 変更なし --</option>
-                <option value="未訪問">通常（未訪問に戻す）</option>
-                <option value="訪問拒否">訪問拒否 拒</option>
-                <option value="外国語">外国語 外</option>
-                <option value="空き家">空き家 空</option>
+                <option value="未訪問">訪問可</option>
+                <option value="訪問拒否">訪問拒否</option>
+                <option value="外国語">外国語</option>
+                <option value="空き家">空き家</option>
             </select>
             <div style="font-weight:bold; font-size:10px; margin-top:4px;">部屋の履歴:</div>
             <div style="max-height:40px; overflow-y:auto; background:white; padding:2px; border:1px solid #ccc;">${historyHtml || '履歴なし'}</div>
