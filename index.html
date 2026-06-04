@@ -385,8 +385,10 @@
         const ab = String(status).match(/不在\((\d+)回目\)/); // 不在は回数を抽出（上限なし）
         if (ab) {
             const n = parseInt(ab[1], 10);
-            const bg = n >= 3 ? '#7FB6D6' : n === 2 ? '#A6CFE4' : '#CBE3F0'; // 3回目以降は最濃
-            return { char: String(n), bg: bg, color: '#0d3c55' };
+            // 1〜5回目で5段階に濃くする（6回目以降は最濃で固定）
+            const bgs = ['#CBE3F0', '#A6CFE4', '#7FB6D6', '#5A9BC4', '#3D7FA8'];
+            const bg = bgs[Math.min(n, 5) - 1];
+            return { char: String(n), bg: bg, color: n >= 4 ? '#ffffff' : '#0d3c55' };
         }
         if (status.indexOf('会えた')     >= 0) return { char: '会', bg: '#F2C892', color: '#5b3b00' }; // 目に優しいオレンジ
         if (status.indexOf('投函')       >= 0) return { char: '□', bg: '#CBE2CC', color: '#2E5E33' };
@@ -420,8 +422,8 @@
             if (el.classList.contains('marker-kodedate')) {
                 const base = isLarge ? { w: 34, f: 19 } : { w: 24, f: 13 };
                 const star = el.classList.contains('marker-star');
-                el.style.width = el.style.height = Math.round(base.w * scale * (star ? 1.2 : 1)) + 'px';
-                el.style.fontSize = Math.round(base.f * scale * (star ? 0.9 : 1)) + 'px';
+                el.style.width = el.style.height = Math.round(base.w * scale * (star ? 1.45 : 1)) + 'px';
+                el.style.fontSize = Math.round(base.f * scale * (star ? 1.05 : 1)) + 'px';
             } else if (el.classList.contains('marker-shuga')) {
                 const base = isLarge ? { w: 38, f: 21 } : { w: 28, f: 16 };
                 el.style.width = el.style.height = Math.round(base.w * scale) + 'px';
@@ -621,7 +623,7 @@
                 <div class="building-title">📍 戸建てを新規登録</div>
                 <div class="inline-group">
                     <label>属性</label>
-                    <select id="new-attribute-k" style="background:#ececec;">
+                    <select id="new-attribute-k" style="background:#d2d2d2;">
                         <option value="通常" selected>訪問可</option>
                         <option value="訪問拒否">訪問拒否</option>
                         <option value="外国語">外国語</option>
@@ -630,7 +632,7 @@
                 </div>
                 <div class="inline-group">
                     <label>訪問結果</label>
-                    <select id="new-status">
+                    <select id="new-status" style="background:#FFF9DD;">
                         <option value="">未訪問</option>
                         <option value="不在(1回目)" selected>不在</option>
                         <option value="会えた">会えた</option>
@@ -928,7 +930,7 @@
             <div class="building-title">${item['建物名 / 世帯名'] || '戸建て'}</div>
             <div class="inline-group">
                 <label>属性</label>
-                <select style="background:#ececec;" onchange="saveAttribute(${item.rowNumber}, this.value)">
+                <select style="background:#d2d2d2;" onchange="saveAttribute(${item.rowNumber}, this.value)">
                     <option value="通常" ${normalSel}>訪問可</option>
                     <option value="訪問拒否" ${sel('訪問拒否')}>訪問拒否</option>
                     <option value="外国語" ${sel('外国語')}>外国語</option>
@@ -937,7 +939,7 @@
             </div>
             <div class="inline-group">
                 <label>訪問結果</label>
-                <select onchange="saveStatus(${item.rowNumber}, this.value)">
+                <select style="background:#FFF9DD;" onchange="saveStatus(${item.rowNumber}, this.value)">
                     <option value="">-- 選択 --</option>
                     <option value="不在">不在</option>
                     <option value="会えた">会えた</option>
@@ -1165,7 +1167,7 @@
             <div style="font-weight:bold; margin-bottom:6px; font-size:12px;">${title}</div>
             <div class="inline-group">
                 <label>属性</label>
-                <select style="background:#ececec;" onchange="saveRoomState(${buildingRow}, ${roomNum}, this.value)">
+                <select style="background:#d2d2d2;" onchange="saveRoomState(${buildingRow}, ${roomNum}, this.value)">
                     <option value="未訪問" ${aSel('未訪問')}>訪問可</option>
                     <option value="訪問拒否" ${aSel('訪問拒否')}>訪問拒否</option>
                     <option value="外国語" ${aSel('外国語')}>外国語</option>
@@ -1174,7 +1176,7 @@
             </div>
             <div class="inline-group">
                 <label>訪問結果</label>
-                <select onchange="saveRoomStatus(${buildingRow}, ${roomNum}, this.value)">
+                <select style="background:#FFF9DD;" onchange="saveRoomStatus(${buildingRow}, ${roomNum}, this.value)">
                     <option value="">-- 選択 --</option>
                     <option value="不在">不在</option>
                     <option value="会えた">会えた</option>
@@ -1182,7 +1184,7 @@
                 </select>
             </div>
             <div style="font-weight:bold; font-size:10px; margin-top:4px;">部屋の履歴:</div>
-            <div style="max-height:40px; overflow-y:auto; background:white; padding:2px; border:1px solid #ccc;">${historyHtml || '<div style="font-size:10px; color:#aaa;">履歴なし</div>'}</div>
+            <div style="min-height:46px; max-height:60px; overflow-y:auto; background:white; padding:2px; border:1px solid #ccc;">${historyHtml || '<div style="font-size:10px; color:#aaa;">履歴なし</div>'}</div>
         `;
         const area = document.getElementById('room-action-area');
         if (area) area.innerHTML = html;
