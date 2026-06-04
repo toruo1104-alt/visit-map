@@ -161,11 +161,62 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbykrm6fNmx5F57FzXtgLVkUHBGlbo_zQJrvipjZaDpGEgfWj_zx00rfTy7l0WiUbw6M/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycby9T38jtySmSlwtEH7qLirZFP-9UEPA7M-xv9F3-zCGaVn6Vrbsu0iF_mPN3hX8JVf-/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
     let ID_TOKEN = ''; // 「Googleで続ける」で取得した署名付きIDトークン(JWT)
+
+    /* ── セッション維持（30分以内は再認証不要・画面更新やアプリ復帰でも継続） ──
+       取得済みIDトークンを localStorage に保存し、30分以内かつ未失効なら
+       認証画面を出さずに自動復帰する。（簡易認証ゆえトークンを保存する設計） */
+    const SESSION_TOKEN_KEY = 'vm_idtoken';
+    const SESSION_TS_KEY = 'vm_idtoken_ts';
+    const SESSION_MAX_MS = 30 * 60 * 1000; // 30分
+
+    function saveSession(token) {
+        try {
+            localStorage.setItem(SESSION_TOKEN_KEY, token);
+            localStorage.setItem(SESSION_TS_KEY, String(Date.now()));
+        } catch (e) {}
+    }
+    function clearSession() {
+        try { localStorage.removeItem(SESSION_TOKEN_KEY); localStorage.removeItem(SESSION_TS_KEY); } catch (e) {}
+    }
+    // 保存トークンが「保存から30分以内 かつ JWT未失効」なら返す。だめなら null。
+    function loadValidSession() {
+        try {
+            const token = localStorage.getItem(SESSION_TOKEN_KEY);
+            const ts = parseInt(localStorage.getItem(SESSION_TS_KEY) || '0', 10);
+            if (!token || !ts) return null;
+            if (Date.now() - ts > SESSION_MAX_MS) return null; // 保存から30分超
+            const payload = JSON.parse(decodeURIComponent(escape(atob(
+                token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+            ))));
+            // トークン自体が失効（または15秒以内に失効）なら使わない
+            if (!payload.exp || payload.exp * 1000 < Date.now() + 15000) return null;
+            return token;
+        } catch (e) { return null; }
+    }
+    // 保存セッションがあれば、認証画面を出さずにアプリへ復帰する
+    function tryResumeSession() {
+        const token = loadValidSession();
+        if (!token) return false;
+        ID_TOKEN = token;
+        enterApp();
+        return true;
+    }
+
+    // サインイン後（新規サインイン／セッション復帰の共通処理）：UIを切り替えてデータ取得
+    function enterApp() {
+        document.getElementById('login-overlay').classList.add('hidden');
+        document.getElementById('signout-btn').style.display = '';
+        document.getElementById('legend-btn').style.display = '';
+        const scaleBtnEl = document.getElementById('scale-btn');
+        scaleBtnEl.style.display = '';
+        scaleBtnEl.textContent = document.body.classList.contains('large-ui') ? '文字：大' : '文字：標準';
+        loadDataFromSheet();
+    }
 
     // GIS(アカウントライブラリ)の読み込み完了後にサインインボタンを初期化する
     function initGoogleSignIn() {
@@ -182,10 +233,14 @@
             type: 'standard', theme: 'filled_black', size: 'large',
             text: 'continue_with', shape: 'pill', logo_alignment: 'center'
         });
-        google.accounts.id.prompt(); // One Tap（再訪ユーザーは自動サインイン）
+        if (!ID_TOKEN) google.accounts.id.prompt(); // 復帰済みなら One Tap は出さない
     }
-    window.addEventListener('load', initGoogleSignIn);
     window.addEventListener('load', initScale);
+    window.addEventListener('load', () => {
+        // まず30分以内の保存セッションで復帰を試み、その後 GIS を初期化（失効後の再サインイン用）
+        tryResumeSession();
+        initGoogleSignIn();
+    });
 
     function initScale() {
         if (localStorage.getItem('uiScale') === 'large') {
@@ -200,7 +255,7 @@
         applyZoomScale(); // マーカーサイズを大/小モードに合わせて更新
     }
 
-    // サインイン成功時：IDトークンを保持し、地図データを読み込む
+    // サインイン成功時：IDトークンを保持・保存し、地図データを読み込む
     function handleCredential(res) {
         ID_TOKEN = res.credential;
         try {
@@ -209,18 +264,14 @@
             ))));
             console.log('サインイン:', payload.email, payload.name);
         } catch (e) {}
-        document.getElementById('login-overlay').classList.add('hidden');
-        document.getElementById('signout-btn').style.display = '';
-        document.getElementById('legend-btn').style.display = '';
-        const scaleBtnEl = document.getElementById('scale-btn');
-        scaleBtnEl.style.display = '';
-        scaleBtnEl.textContent = document.body.classList.contains('large-ui') ? '文字：大' : '文字：標準';
-        loadDataFromSheet();
+        saveSession(ID_TOKEN); // 30分セッションとして保存
+        enterApp();
     }
 
     // サインアウト：トークンを破棄してログイン画面へ戻す
     function signOut() {
         ID_TOKEN = '';
+        clearSession(); // 保存セッションも破棄
         try { google.accounts.id.disableAutoSelect(); } catch (e) {}
         currentMarkers.forEach(function (m) { m.remove(); });
         currentMarkers = [];
@@ -234,6 +285,7 @@
     // ログイン画面を再表示（認証エラー時）
     function showLogin() {
         ID_TOKEN = '';
+        clearSession(); // 失効/無効トークンの保存セッションも破棄
         document.getElementById('signout-btn').style.display = 'none';
         document.getElementById('login-overlay').classList.remove('hidden');
         // ★ここで prompt() を呼ぶと、initialize の auto_select:true により
@@ -357,8 +409,8 @@
     // ベースサイズは全体的に1段階小さめ。☆形は本体が小さいため少し大きめ＆文字は控えめに。
     function applyZoomScale() {
         const zoom = map.getZoom();
-        // zoom17以上=100%, 16=85%, 15=70%, それ以下=55%
-        const scale = zoom >= 17 ? 1.0 : zoom >= 16 ? 0.85 : zoom >= 15 ? 0.70 : 0.55;
+        // 高ズーム(最大付近)ほど大きく：19以上=130%, 18=115%, 17=100%, 16=85%, 15=70%, それ以下=55%
+        const scale = zoom >= 19 ? 1.30 : zoom >= 18 ? 1.15 : zoom >= 17 ? 1.0 : zoom >= 16 ? 0.85 : zoom >= 15 ? 0.70 : 0.55;
         const isLarge = document.body.classList.contains('large-ui');
         currentMarkers.forEach(m => {
             const el = m.getElement();
@@ -452,7 +504,7 @@
         if (activeNewMarker) { activeNewMarker.remove(); activeNewMarker = null; closed = true; }
         currentMarkers.forEach(m => {
             const p = m.getPopup();
-            if (p && p.isOpen()) { m.togglePopup(); closed = true; }
+            if (p && p.isOpen()) { resetRoomActionPanel(p); m.togglePopup(); closed = true; }
         });
         return closed;
     }
@@ -542,6 +594,13 @@
         if (e.key === 'Escape') closeOpenForms();
     });
 
+    // 他アプリから戻った（再表示された）ときに地図の描画を作り直す（背景化で消える対策）
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            try { map.resize(); } catch (e) {}
+        }
+    });
+
     // 新規登録フォーム生成
     function handleMapClickOrTap(lngLat, forcedType) {
         if (activeNewMarker) activeNewMarker.remove();
@@ -557,7 +616,7 @@
                 <div class="building-title">📍 戸建てを新規登録</div>
                 <div class="inline-group">
                     <label>属性</label>
-                    <select id="new-attribute-k">
+                    <select id="new-attribute-k" style="background:#ececec;">
                         <option value="通常" selected>訪問可</option>
                         <option value="訪問拒否">訪問拒否</option>
                         <option value="外国語">外国語</option>
@@ -605,13 +664,15 @@
         formHtml += `</div>`;
 
         const popup = new mapboxgl.Popup({ offset: 25, closeOnClick: false, maxWidth: 'none', anchor: 'bottom', focusAfterOpen: false }).setHTML(formHtml);
+        // 新規フォームの吹き出しも「上端基準」で画面に収める（開いた直後に実高さを測る）
+        popup.on('open', () => fitPopupInView(activeNewMarker, 0));
         activeNewMarker = new mapboxgl.Marker({ color: forcedType === '戸建て' ? '#E0A93C' : '#C75F56' })
             .setLngLat([lngVal, latVal])
             .setPopup(popup)
             .addTo(map);
         activeNewMarker.togglePopup();
-        centerForPopup([lngVal, latVal]);
 
+        // 集合住宅はグリッドを後から生成するため、生成後に高さが変わる→再度フィットさせる
         if (forcedType === '集合住宅') { setTimeout(generateSetupGrid, 100); }
     }
 
@@ -656,6 +717,7 @@
             for (let r = 1; r <= maxRoom; r++) gridActiveRooms.push(f * 100 + r);
         }
         renderRoomGrid();
+        if (activeNewMarker) fitPopupInView(activeNewMarker, 0); // グリッド生成後の高さで再フィット
     }
 
     function toggleSetupRoom(roomNum) {
@@ -1050,9 +1112,12 @@
         return '<div style="min-height:84px; display:flex; align-items:center; justify-content:center; font-size:11px; color:#888; text-align:center;">🚪 部屋をタップして操作してください</div>';
     }
 
-    // 吹き出しを閉じたときに、部屋の選択ハイライトと操作欄を初期状態へ戻す（選択状態を解除）
+    // 吹き出しを閉じたときに、部屋の選択ハイライトと操作欄を初期状態へ戻す（選択状態を解除）。
+    // ※ Mapbox は 'close' 発火前に _container を破棄するため getElement() が null になる。
+    //    その場合は破棄されない _content（吹き出し本文）を参照してリセットする。
     function resetRoomActionPanel(popup) {
-        const root = (popup && popup.getElement) ? popup.getElement() : null;
+        if (!popup) return;
+        const root = (popup.getElement && popup.getElement()) || popup._content;
         if (!root) return;
         root.querySelectorAll('.cell-operating').forEach(el => el.classList.remove('cell-operating'));
         const area = root.querySelector('#room-action-area');
