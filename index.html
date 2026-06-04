@@ -47,7 +47,7 @@
         .cell-operating { outline: 3px solid #E07A4E; outline-offset: -3px; }
         
         /* 履歴・メモスタイル */
-        .history-box { min-height: 48px; max-height: 80px; overflow-y: auto; background: #f9f9f9; border: 1px solid #ddd; padding: 4px; margin-top: 4px; font-size: 11px; }
+        .history-box { min-height: 66px; max-height: 90px; overflow-y: auto; background: #f9f9f9; border: 1px solid #ddd; padding: 4px; margin-top: 4px; font-size: 11px; }
         .history-item { border-bottom: 1px dashed #eee; padding: 2px 0; }
         .memo-section { margin-top: 8px; border-top: 1px solid #ddd; padding-top: 6px; }
 
@@ -134,7 +134,7 @@
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#3E8E54; border-radius:50%;">□</span>投函</div>
     <div class="legend-row"><span class="legend-chip" style="background:#B0554D; color:#fff; clip-path:polygon(50% 2%,61% 35%,96% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,4% 35%,39% 35%);">拒</span>訪問拒否（☆・属性）</div>
     <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; color:#fff; clip-path:polygon(50% 2%,61% 35%,96% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,4% 35%,39% 35%);">外</span>外国語（☆・属性）</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#8C8C8C; border-radius:50%;">空</span>空き家（属性）</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#8C8C8C; border-radius:50%;">空</span>空き家/空き地（属性）</div>
     <div style="font-weight:bold; font-size:10px; color:#666; margin:6px 0 2px;">── 集合住宅ピン（構成属性）──</div>
     <div class="legend-row"><span class="legend-chip" style="background:#D98E5B; border-radius:4px;"></span>ファミリー</div>
     <div class="legend-row"><span class="legend-chip" style="background:#5B8BB0; border-radius:4px;"></span>シングル</div>
@@ -149,7 +149,7 @@
     <div class="legend-row"><span class="legend-chip" style="background:#CBE2CC; border:1px solid #ccc; color:#2E5E33;">□</span>投函</div>
     <div class="legend-row"><span class="legend-chip" style="background:#A8554E; border:1px solid #ccc; color:#fff;">拒</span>訪問拒否（属性）</div>
     <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; border:1px solid #ccc; color:#fff;">外</span>外国語（属性）</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#D4D4D4; border:1px solid #ccc; color:#555;">空</span>空き家（属性）</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#D4D4D4; border:1px solid #ccc; color:#555;">空</span>空き家/空き地（属性）</div>
 </div>
 
 <script>
@@ -161,7 +161,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycby9T38jtySmSlwtEH7qLirZFP-9UEPA7M-xv9F3-zCGaVn6Vrbsu0iF_mPN3hX8JVf-/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyGaDGrqe-x6RFM-ja4HtJCKqZdIVBpdAuAMaabY50aARItDYZ4Q6OJMKFA1K3dHmHX/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -382,9 +382,12 @@
     // 部屋セルの見た目（状態に応じた色・文字）。未訪問は既定色のまま。落ち着いたトーンに調整。
     function roomVisual(status) {
         status = status || '';
-        if (status.indexOf('不在(1回目)') >= 0) return { char: '1', bg: '#CBE3F0', color: '#0d3c55' }; // 少し濃く
-        if (status.indexOf('不在(2回目)') >= 0) return { char: '2', bg: '#A6CFE4', color: '#0d3c55' }; // さらに濃く
-        if (status.indexOf('不在(3回目)') >= 0) return { char: '3', bg: '#7FB6D6', color: '#0d3c55' }; // もっと濃く
+        const ab = String(status).match(/不在\((\d+)回目\)/); // 不在は回数を抽出（上限なし）
+        if (ab) {
+            const n = parseInt(ab[1], 10);
+            const bg = n >= 3 ? '#7FB6D6' : n === 2 ? '#A6CFE4' : '#CBE3F0'; // 3回目以降は最濃
+            return { char: String(n), bg: bg, color: '#0d3c55' };
+        }
         if (status.indexOf('会えた')     >= 0) return { char: '会', bg: '#F2C892', color: '#5b3b00' }; // 目に優しいオレンジ
         if (status.indexOf('投函')       >= 0) return { char: '□', bg: '#CBE2CC', color: '#2E5E33' };
         if (status.indexOf('訪問拒否')   >= 0) return { char: '拒', bg: '#A8554E', color: '#ffffff' }; // くすみブリック
@@ -470,9 +473,11 @@
         if (attr === '外国語')   return { char: '外', color: '#8E79AB', star: true };
         if (attr === '空き家')   return { char: '空', color: '#8C8C8C' };
         const s = item.最新ステータス;
-        if (s === '不在(1回目)') return { char: '1', color: '#333333' };
-        if (s === '不在(2回目)') return { char: '2', color: '#4A78B0' };
-        if (s === '不在(3回目)') return { char: '3', color: '#333333' };
+        const ab = String(s).match(/不在\((\d+)回目\)/); // 不在は回数を抽出（上限なし）
+        if (ab) {
+            const n = parseInt(ab[1], 10);
+            return { char: String(n), color: n >= 3 ? '#1B4F72' : n === 2 ? '#4A78B0' : '#333333' };
+        }
         if (s === '会えた')      return { char: '会', color: '#DB7C2E' }; // オレンジ
         if (s === '投函')        return { char: '□', color: '#3E8E54' };
         if (s === '訪問拒否')    return { char: '拒', color: '#B0554D', star: true };
@@ -620,7 +625,7 @@
                         <option value="通常" selected>訪問可</option>
                         <option value="訪問拒否">訪問拒否</option>
                         <option value="外国語">外国語</option>
-                        <option value="空き家">空き家</option>
+                        <option value="空き家">空き家/空き地</option>
                     </select>
                 </div>
                 <div class="inline-group">
@@ -632,7 +637,7 @@
                         <option value="投函">投函</option>
                     </select>
                 </div>
-                <div class="form-group"><label>メモ</label><textarea id="new-memo" rows="2" placeholder="例：留守がち"></textarea></div>
+                <div class="form-group"><label>メモ</label><textarea id="new-memo" rows="2"></textarea></div>
                 <button class="submit-btn" id="reg-btn" onclick="submitNewLocation(${latVal}, ${lngVal}, '戸建て')">登録</button>
             `;
         } else {
@@ -872,7 +877,11 @@
             const isShuga = (firstItem.種別 === '集合住宅');
             // 吹き出しが開いたら、実高さを測ってピン＋吹き出しが画面に収まるよう寄せる。
             // 集合住宅は後から部屋操作欄が広がるぶん(約140px)を見込む。
-            popup.on('open', () => fitPopupInView(marker, isShuga ? 140 : 0));
+            // 開くたびに操作欄を初期化（前回の部屋選択を持ち越さない＝確実に「部屋をタップして…」に）
+            popup.on('open', () => {
+                if (isShuga) resetRoomActionPanel(popup);
+                fitPopupInView(marker, isShuga ? 140 : 0);
+            });
             // 吹き出しを閉じたら、選択中の部屋ハイライトを消し、操作欄を初期表示に戻す（選択状態を解除）
             popup.on('close', () => resetRoomActionPanel(popup));
 
@@ -923,7 +932,7 @@
                     <option value="通常" ${normalSel}>訪問可</option>
                     <option value="訪問拒否" ${sel('訪問拒否')}>訪問拒否</option>
                     <option value="外国語" ${sel('外国語')}>外国語</option>
-                    <option value="空き家" ${sel('空き家')}>空き家</option>
+                    <option value="空き家" ${sel('空き家')}>空き家/空き地</option>
                 </select>
             </div>
             <div class="inline-group">
@@ -1160,7 +1169,7 @@
                     <option value="未訪問" ${aSel('未訪問')}>訪問可</option>
                     <option value="訪問拒否" ${aSel('訪問拒否')}>訪問拒否</option>
                     <option value="外国語" ${aSel('外国語')}>外国語</option>
-                    <option value="空き家" ${aSel('空き家')}>空き家</option>
+                    <option value="空き家" ${aSel('空き家')}>空き家/空き地</option>
                 </select>
             </div>
             <div class="inline-group">
@@ -1179,13 +1188,12 @@
         if (area) area.innerHTML = html;
     }
 
-    // 「不在」を選ぶと現在の状況から不在回数を1つ繰り上げる
+    // 「不在」を選ぶと不在回数を1つ繰り上げる（上限なし）。
+    // 直前が不在以外（会えた/投函/属性/未訪問）なら一致せず「不在(1回目)」に戻る＝リセット。
     function nextAbsence(current) {
-        current = current || '';
-        if (current.indexOf('不在(1回目)') >= 0) return '不在(2回目)';
-        if (current.indexOf('不在(2回目)') >= 0) return '不在(3回目)';
-        if (current.indexOf('不在(3回目)') >= 0) return '不在(3回目)'; // 3回で打ち止め
-        return '不在(1回目)';
+        const m = String(current || '').match(/不在\((\d+)回目\)/);
+        const n = m ? parseInt(m[1], 10) + 1 : 1;
+        return '不在(' + n + '回目)';
     }
 
     // 戸建ての更新を、ポップアップを閉じずにマーカーの色・吹き出し内容だけ最新化する。
