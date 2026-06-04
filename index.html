@@ -78,7 +78,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzARHRW2BDsJEYIPxLSOiAXthgUtktUnrJOUXohfizQbTly2IobaMqIMv7Bqz6SBIu_/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwBA9C1HgRKPhigSUOr9OMKZ7XXMDxjE9FOWX6NJ4mGkss9KQcbP4ngnx57h1H88dfd/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -132,7 +132,12 @@
         ID_TOKEN = '';
         document.getElementById('signout-btn').style.display = 'none';
         document.getElementById('login-overlay').classList.remove('hidden');
-        try { google.accounts.id.prompt(); } catch (e) {}
+        // ★ここで prompt() を呼ぶと、initialize の auto_select:true により
+        //   ユーザー操作なしで即・自動再サインインし、認証/権限エラーが続くと
+        //   「地図→ログイン→地図…」の無限ループになる。
+        //   そのため自動再試行はせず、One Tap の自動選択を無効化して、
+        //   ユーザーが「Googleで続ける」ボタンを押したときだけ再認証する。
+        try { google.accounts.id.disableAutoSelect(); } catch (e) {}
     }
 
     // GAS API 呼び出し（fetch）。CORSプリフライト回避のため Content-Type は text/plain。
@@ -492,9 +497,11 @@
     function handleServerError(err) {
         console.error('サーバーエラー:', err);
         const msg = (err && err.message) ? err.message : String(err);
-        // 認証エラー（トークン無効・期限切れ・権限なし）はログイン画面へ戻す
+        // 認証エラー（トークン無効・期限切れ・権限なし）はログイン画面へ戻す。
+        // サーバーの具体的な理由（権限なしなら対象メール入り）をそのまま表示し、原因を分かるようにする。
+        // showLogin() は自動再サインインしないため、ここに来てもループにはならない。
         if (msg.indexOf('Access Denied') >= 0 || msg.indexOf('利用権限') >= 0 || msg.indexOf('サインイン') >= 0) {
-            showToast('サインインが必要です（または利用権限がありません）。', true);
+            showToast(msg, true);
             showLogin();
             return;
         }
