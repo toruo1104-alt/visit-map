@@ -30,7 +30,7 @@
         .form-group { margin-bottom: 6px; }
         .form-group label { display: block; font-size: 11px; font-weight: bold; margin-bottom: 2px; }
         .form-group input, .form-group select, .form-group textarea { width: 100%; box-sizing: border-box; padding: 4px; font-size: 12px; }
-        .btn-row { display: flex; gap: 4px; margin-top: 6px; }
+        .btn-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
         .submit-btn { flex: 1; padding: 6px; background: #5E9DB8; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; }
         .clear-btn { background: #C75F56; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
         .save-btn { background: #5FA97D; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
@@ -75,7 +75,7 @@
         .inline-group select { flex: 1; box-sizing: border-box; padding: 4px; font-size: 12px; }
 
         /* ── 処理中インジケーター（サーバー通信中に表示） ── */
-        #busy-indicator { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10001; background: rgba(44,62,80,0.92); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px; display: none; align-items: center; gap: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+        #busy-indicator { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10001; background: rgba(44,62,80,0.92); color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 14px; display: none; align-items: center; gap: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
         #busy-indicator .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: busy-spin 0.7s linear infinite; }
         @keyframes busy-spin { to { transform: rotate(360deg); } }
 
@@ -161,7 +161,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyW5ouggAsuFpVvGwkKkS0yKxLjLBBzYxhidWoyIf7jzTOMQZVL2Gh8c80b0OQ8eZbO/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbykrm6fNmx5F57FzXtgLVkUHBGlbo_zQJrvipjZaDpGEgfWj_zx00rfTy7l0WiUbw6M/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -305,7 +305,8 @@
         map.easeTo({ center: lngLat, offset: [0, h * 0.18], duration: 300 });
     }
 
-    // 吹き出しの実高さを測り、ピンと吹き出しの両方が画面に収まるようピン位置を下げる。
+    // 吹き出しの実高さを測り、「吹き出しの上端」が画面上部の一定位置に来るよう地図を移動する。
+    // （ピンではなく吹き出し上部を基準にするので、背の高い集合住宅でも上端が見切れない）
     // reservePx: これから広がる余白（集合住宅の部屋操作欄ぶん）を前もって見込む。
     function fitPopupInView(marker, reservePx) {
         const popup = marker.getPopup();
@@ -313,12 +314,16 @@
         const el = popup.getElement();
         const content = el ? el.querySelector('.popup-content') : null;
         const mapH = map.getContainer().clientHeight;
-        const pad = 12, tip = 28; // 吹き出しの吹き出し口ぶんの余白
+        const pad = 12, tip = 28; // 吹き出し口ぶんの余白
         let popupH = (content ? content.getBoundingClientRect().height : mapH * 0.4) + (reservePx || 0);
         popupH = Math.min(popupH, mapH * 0.62); // 吹き出しは最大でも約60vh（中はスクロール）
-        // ピンの画面Y = mapH/2 + oy。吹き出しは上方向に伸びるので、その上端が画面内に収まるoyを求める。
-        let oy = (popupH + tip + pad) - mapH / 2;
-        oy = Math.max(mapH * 0.10, Math.min(oy, mapH / 2 - pad)); // 下げ過ぎ（ピンが画面外）も防ぐ
+        // 吹き出し上端を画面の上から topMargin の位置に合わせる。
+        //   吹き出し上端Y = ピン画面Y − tip − popupH、ピン画面Y = mapH/2 + oy
+        //   → oy = topMargin + tip + popupH − mapH/2
+        const topMargin = mapH * 0.12;
+        let oy = topMargin + tip + popupH - mapH / 2;
+        const limit = mapH / 2 - pad; // ピンが画面外に出ない範囲にだけ収める
+        oy = Math.max(-limit, Math.min(oy, limit));
         map.easeTo({ center: marker.getLngLat(), offset: [0, oy], duration: 300 });
     }
 
@@ -462,10 +467,14 @@
     //   ・1回目タップも DOUBLE_TAP_MS 待ってから登録を開く（その間に2回目が来たらキャンセル）。
     let singleTapTimer = null;
     let lastTapTime = 0;
+    let lastTouchStartTime = 0;   // 直近のタッチ開始時刻（ダブルタップ判定用）
+    let doubleTapZoomUntil = 0;   // この時刻まではダブルタップ由来の click を無視する
     const DOUBLE_TAP_MS = 300;
     map.on('click', (e) => {
         // ピンチ・パン由来のクリックは無視する
         if (tapSuppressed) { tapSuppressed = false; return; }
+        // スマホのダブルタップ（ズーム）中に合成される click は登録に使わない
+        if (Date.now() < doubleTapZoomUntil) { clearTimeout(singleTapTimer); return; }
         // 地図の背景（canvas）の場合のみ反応
         const onCanvas = e.originalEvent && e.originalEvent.target &&
             typeof e.originalEvent.target.className === 'string' &&
@@ -503,6 +512,14 @@
         }
         tapSuppressed = false;
         touchStartPt = e.point;
+        // ダブルタップ検出：前回のタッチ開始から350ms以内の2回目タップなら、
+        // 保留中の新規登録をキャンセルし、以後600msのclick登録を抑止（＝ズームに専念）。
+        const tnow = Date.now();
+        if (tnow - lastTouchStartTime < 350) {
+            doubleTapZoomUntil = tnow + 600;
+            clearTimeout(singleTapTimer);
+        }
+        lastTouchStartTime = tnow;
         // 長押しで集合住宅登録
         window.longPressTimer = setTimeout(() => {
             if (tapSuppressed) return;
@@ -863,8 +880,9 @@
                 <label style="font-size:11px; font-weight:bold;">メモ</label>
                 <textarea id="memo-${item.rowNumber}" rows="2" style="width:100%; font-size:12px;" readonly onpointerdown="this.removeAttribute('readonly')">${item.特記事項 || ''}</textarea>
                 <div class="btn-row">
-                    <button class="save-btn" onclick="saveMemo(${item.rowNumber})">保存</button>
-                    <button class="clear-btn" onclick="clearMemo(${item.rowNumber})">クリア</button>
+                    <button class="save-btn" onclick="saveMemo(${item.rowNumber})">メモ保存</button>
+                    <button class="clear-btn" onclick="clearMemo(${item.rowNumber})">メモ削除</button>
+                    <button class="clear-btn" style="background:#7f8c8d;" onclick="confirmClearHistory(${item.rowNumber}, false)">履歴欄のクリア</button>
                 </div>
             </div>
             <button class="clear-btn" style="width:100%; margin-top:8px;" onclick="confirmDelete(${item.rowNumber})">🗑 このピンを削除</button>
@@ -890,9 +908,11 @@
             for (let r = 1; r <= maxRoom; r++) {
                 const roomNum = f * 100 + r;
                 if (validRoomsArr.includes(roomNum)) {
-                    // 色は状態で変えるが、文字は常に部屋番号（303など）。番号不明時は空欄。
-                    const v = roomVisual(roomStatusMap[roomNum]);
-                    const label = hideNum ? '' : roomNum;
+                    // 色は状態で変える。文字は通常は部屋番号だが、拒否・外国語のときは☆を表示する。
+                    // （番号はセルをタップすると下の操作欄に「XXX号室」として表示される）
+                    const st = roomStatusMap[roomNum];
+                    const v = roomVisual(st);
+                    const label = (st === '訪問拒否' || st === '外国語') ? '☆' : (hideNum ? '' : roomNum);
                     gridHtml += `<td class="cell-active" data-room="${roomNum}" style="min-width:32px; background:${v.bg}; color:${v.color};" onclick="showRoomAction(${first.rowNumber}, ${roomNum}, this)">${label}</td>`;
                 } else {
                     gridHtml += `<td class="cell-inactive"></td>`;
@@ -914,8 +934,9 @@
                 <label style="font-size:11px; font-weight:bold;">メモ</label>
                 <textarea id="memo-${first.rowNumber}" rows="1" style="width:100%; font-size:11px;" readonly onpointerdown="this.removeAttribute('readonly')">${cleanMemo(first)}</textarea>
                 <div class="btn-row">
-                    <button class="save-btn" onclick="saveMemo(${first.rowNumber})">保存</button>
-                    <button class="clear-btn" onclick="clearMemo(${first.rowNumber})">クリア</button>
+                    <button class="save-btn" onclick="saveMemo(${first.rowNumber})">メモ保存</button>
+                    <button class="clear-btn" onclick="clearMemo(${first.rowNumber})">メモ削除</button>
+                    <button class="clear-btn" style="background:#7f8c8d;" onclick="confirmClearHistory(${first.rowNumber}, true)">履歴欄のクリア</button>
                 </div>
             </div>
             <button class="save-btn" style="background:#34495e; width:100%; margin-top:8px;" onclick="confirmShugaEdit(${first.rowNumber}, this)">✏️ 建物情報を編集</button>
@@ -1024,9 +1045,9 @@
         }
     }
 
-    // 部屋未選択時の操作欄プレースホルダ（部屋を選ぶ前から欄を表示しておく）
+    // 部屋未選択時の操作欄プレースホルダ（部屋を選ぶ前から欄を表示。約4行分の高さを確保）
     function roomActionPlaceholder() {
-        return '<div style="font-size:11px; color:#888; text-align:center; padding:6px 2px;">🚪 部屋をタップして操作してください</div>';
+        return '<div style="min-height:84px; display:flex; align-items:center; justify-content:center; font-size:11px; color:#888; text-align:center;">🚪 部屋をタップして操作してください</div>';
     }
 
     // 吹き出しを閉じたときに、部屋の選択ハイライトと操作欄を初期状態へ戻す（選択状態を解除）
@@ -1058,14 +1079,25 @@
         // この部屋の現在値（属性 or 訪問結果）。属性の選択肢に現在値を反映するために使う。
         let curRoomVal = '';
         try { curRoomVal = (JSON.parse((item && item.部屋ステータス) || '{}') || {})[roomNum] || ''; } catch(e){}
-        const stSel = (v) => curRoomVal === v ? 'selected' : '';
+        // 現在値が属性(拒否/外国語/空き家)ならそれを選択。それ以外（未操作 or 訪問結果）は初期状態＝「訪問可」を選択。
+        const isAttr = ['訪問拒否', '外国語', '空き家'].indexOf(curRoomVal) >= 0;
+        const aSel = (v) => ((isAttr ? curRoomVal === v : v === '未訪問') ? 'selected' : '');
 
         const hideNum = item && String(item.部屋番号非表示) === '1';
         const title = hideNum ? '🚪 部屋' : `🚪 ${roomNum}号室`;
 
-        // レイアウトは戸建ての詳細（inline-group：ラベル左・セレクト右）に合わせる
+        // レイアウトは戸建ての詳細（inline-group：ラベル左・セレクト右）に合わせる。属性を上、訪問結果を下に。
         const html = `
             <div style="font-weight:bold; margin-bottom:6px; font-size:12px;">${title}</div>
+            <div class="inline-group">
+                <label>属性</label>
+                <select style="background:#ececec;" onchange="saveRoomState(${buildingRow}, ${roomNum}, this.value)">
+                    <option value="未訪問" ${aSel('未訪問')}>訪問可</option>
+                    <option value="訪問拒否" ${aSel('訪問拒否')}>訪問拒否</option>
+                    <option value="外国語" ${aSel('外国語')}>外国語</option>
+                    <option value="空き家" ${aSel('空き家')}>空き家</option>
+                </select>
+            </div>
             <div class="inline-group">
                 <label>訪問結果</label>
                 <select onchange="saveRoomStatus(${buildingRow}, ${roomNum}, this.value)">
@@ -1073,16 +1105,6 @@
                     <option value="不在">不在</option>
                     <option value="会えた">会えた</option>
                     <option value="投函">投函</option>
-                </select>
-            </div>
-            <div class="inline-group">
-                <label>属性</label>
-                <select style="background:#ececec;" onchange="saveRoomState(${buildingRow}, ${roomNum}, this.value)">
-                    <option value="">-- 変更なし --</option>
-                    <option value="未訪問" ${stSel('未訪問')}>訪問可</option>
-                    <option value="訪問拒否" ${stSel('訪問拒否')}>訪問拒否</option>
-                    <option value="外国語" ${stSel('外国語')}>外国語</option>
-                    <option value="空き家" ${stSel('空き家')}>空き家</option>
                 </select>
             </div>
             <div style="font-weight:bold; font-size:10px; margin-top:4px;">部屋の履歴:</div>
@@ -1193,6 +1215,30 @@
         if (confirm("メモをクリアしますか？\n「OK」でクリア、「キャンセル」で戻る")) {
             apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: null, isClearMemo: true }).then(renderMarkers).catch(handleServerError);
         }
+    }
+
+    // 集合住宅の吹き出しを、閉じずにその場で最新化する（履歴クリア後などに使用）
+    function refreshShugaPopup(buildingRow, latest) {
+        currentData = latest;
+        const item = currentData.find(d => d.rowNumber === buildingRow);
+        const marker = currentMarkers.find(m => m._rowNumber === buildingRow);
+        const popup = marker ? marker.getPopup() : null;
+        if (item && popup) {
+            popup.setHTML('<div class="popup-content">' + createShugaViewHtml([item]) + '</div>');
+        } else {
+            renderMarkers(latest);
+        }
+    }
+
+    // 履歴欄(R列)をすべてクリアする。削除と同様に実行前に必ず確認する。
+    function confirmClearHistory(rowNumber, isShuga) {
+        if (!confirm("この地点の履歴欄をすべてクリアします。\n元に戻せません。\n\n実行してよろしいですか？")) return;
+        showBusy('更新中…');
+        apiCall('clearHistory', { rowNumber: rowNumber }).then((latest) => {
+            showToast('履歴欄をクリアしました', false);
+            if (isShuga) refreshShugaPopup(rowNumber, latest);
+            else applyKodateChange(rowNumber)(latest);
+        }).catch(handleServerError).finally(hideBusy);
     }
 </script>
 
