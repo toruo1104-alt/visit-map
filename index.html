@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ボランティア訪問履歴マップ（決定版）</title>
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
@@ -53,6 +54,35 @@
         .custom-marker { display: flex; justify-content: center; align-items: center; font-weight: bold; border-radius: 50%; cursor: pointer; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
         .marker-kodedate { width: 28px; height: 28px; font-size: 15px; border: 2px solid #333; }
         .marker-shuga { width: 32px; height: 32px; font-size: 18px; background: #3FB1CE; border: 2px solid white; border-radius: 6px; }
+
+        /* ── スケールボタン ── */
+        #scale-btn { position: absolute; bottom: 10px; right: 86px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+
+        /* ── モバイル自動拡大（viewport追加後、スマホは1:1描画になるのでこれが効く） ── */
+        @media (max-width: 600px) {
+            .marker-kodedate { width: 34px !important; height: 34px !important; font-size: 18px !important; }
+            .marker-shuga { width: 38px !important; height: 38px !important; font-size: 20px !important; }
+            .popup-content { width: min(320px, 92vw) !important; font-size: 14px !important; }
+            .building-title { font-size: 16px !important; }
+            .grid-table { font-size: 12px !important; }
+            .form-group label { font-size: 13px !important; }
+            .form-group input, .form-group select, .form-group textarea { font-size: 14px !important; padding: 6px !important; }
+            .submit-btn { padding: 10px !important; font-size: 15px !important; }
+            .history-box { font-size: 12px !important; }
+        }
+
+        /* ── 手動「大」モード（.large-ui が body に付いたとき追加拡大） ── */
+        body.large-ui .marker-kodedate { width: 40px !important; height: 40px !important; font-size: 22px !important; }
+        body.large-ui .marker-shuga { width: 44px !important; height: 44px !important; font-size: 24px !important; }
+        body.large-ui .popup-content { width: min(360px, 96vw) !important; font-size: 16px !important; }
+        body.large-ui .building-title { font-size: 18px !important; }
+        body.large-ui .grid-table { font-size: 14px !important; }
+        body.large-ui .grid-floor { font-size: 12px !important; }
+        body.large-ui .form-group label { font-size: 14px !important; }
+        body.large-ui .form-group input, body.large-ui .form-group select, body.large-ui .form-group textarea { font-size: 15px !important; padding: 7px !important; }
+        body.large-ui .submit-btn { padding: 12px !important; font-size: 16px !important; }
+        body.large-ui .clear-btn, body.large-ui .save-btn { font-size: 13px !important; padding: 7px 12px !important; }
+        body.large-ui .history-box { font-size: 13px !important; }
     </style>
 </head>
 <body>
@@ -67,6 +97,7 @@
     <div id="login-note">サインインできない場合は、管理者にこのアプリのスプレッドシートへの共有を依頼してください。</div>
 </div>
 
+<button id="scale-btn" onclick="toggleScale()" style="display:none;">文字：標準</button>
 <button id="signout-btn" onclick="signOut()" style="display:none;">サインアウト</button>
 
 <script>
@@ -102,6 +133,19 @@
         google.accounts.id.prompt(); // One Tap（再訪ユーザーは自動サインイン）
     }
     window.addEventListener('load', initGoogleSignIn);
+    window.addEventListener('load', initScale);
+
+    function initScale() {
+        if (localStorage.getItem('uiScale') === 'large') {
+            document.body.classList.add('large-ui');
+        }
+    }
+
+    function toggleScale() {
+        const isLarge = document.body.classList.toggle('large-ui');
+        localStorage.setItem('uiScale', isLarge ? 'large' : 'normal');
+        document.getElementById('scale-btn').textContent = isLarge ? '文字：大' : '文字：標準';
+    }
 
     // サインイン成功時：IDトークンを保持し、地図データを読み込む
     function handleCredential(res) {
@@ -114,6 +158,9 @@
         } catch (e) {}
         document.getElementById('login-overlay').classList.add('hidden');
         document.getElementById('signout-btn').style.display = '';
+        const scaleBtnEl = document.getElementById('scale-btn');
+        scaleBtnEl.style.display = '';
+        scaleBtnEl.textContent = document.body.classList.contains('large-ui') ? '文字：大' : '文字：標準';
         loadDataFromSheet();
     }
 
@@ -124,6 +171,7 @@
         currentMarkers.forEach(function (m) { m.remove(); });
         currentMarkers = [];
         document.getElementById('signout-btn').style.display = 'none';
+        document.getElementById('scale-btn').style.display = 'none';
         document.getElementById('login-overlay').classList.remove('hidden');
     }
 
