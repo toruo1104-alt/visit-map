@@ -32,6 +32,8 @@
         #area-modal-body { padding: 12px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; }
         .area-opt { background: #5E9DB8; color: #fff; border: none; border-radius: 6px; padding: 10px 14px; font-size: 14px; cursor: pointer; min-width: 72px; }
         .area-opt-num { min-width: 0; width: 46px; padding: 9px 0; text-align: center; }
+        /* 移動後の地域名ラベル（画面上部） */
+        #area-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(224,49,49,0.95); color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); max-width: 90%; text-align: center; white-space: nowrap; }
 
         /* ポップアップ共通 */
         .popup-content { width: 290px; max-height: 60vh; overflow-y: auto; font-size: 13px; color: #333; }
@@ -133,6 +135,9 @@
 <button id="signout-btn" onclick="signOut()"   style="display:none;">サインアウト</button>
 <button id="legend-btn"  onclick="toggleLegend()" style="display:none;">凡例</button>
 <button id="area-nav-btn" onclick="openAreaNav()" style="display:none;">🔍住所</button>
+
+<!-- 移動後に表示する地域名ラベル（約10秒） -->
+<div id="area-label" style="display:none;"></div>
 
 <!-- 住所で移動（地区→丁目→番地） -->
 <div id="area-modal">
@@ -240,6 +245,7 @@
         const scaleBtnEl = document.getElementById('scale-btn');
         scaleBtnEl.style.display = '';
         scaleBtnEl.textContent = document.body.classList.contains('large-ui') ? '文字：大' : '文字：標準';
+        loadBlocks(); // 街区ポリゴン(blocks.geojson)を先読み
         loadDataFromSheet();
     }
 
@@ -545,7 +551,7 @@
             if (AREA_DATA[val] === null) {            // 丁目を持たない地区（鹿骨町）→ そのまま移動（枠なし）
                 areaSel.chome = null;
                 closeAreaNav();
-                geocodeAndFly('東京都江戸川区' + val, 16, false);
+                geocodeAndFly('東京都江戸川区' + val, 16, false, val);
             } else {
                 renderAreaStep('chome');
             }
@@ -555,78 +561,113 @@
         } else if (kind === 'banchi') {
             // 例：「東京都江戸川区東小岩3-5」。GSIはこの丁目-番地表記を高精度に解決する。
             const query = '東京都江戸川区' + areaSel.district + areaSel.chome + '-' + val;
+            const label = areaSel.district + areaSel.chome + '丁目' + val + '番';
             closeAreaNav();
-            geocodeAndFly(query, 18, true);
+            geocodeAndFly(query, 18, true, label);
         }
     }
     // 住所をジオコーディングして地点へ移動。日本の番地に強い国土地理院(GSI)を優先し、失敗時のみMapbox。
-    // outline=true のとき、移動先の番地を赤枠で囲んで表示する。
-    function geocodeAndFly(query, zoom, outline) {
+    // outline=true のとき、移動先の番地を含む街区を赤線で囲む。label を画面上部に約10秒表示。
+    function geocodeAndFly(query, zoom, outline, label) {
         zoom = zoom || 18;
         showBusy('検索中…');
         fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + encodeURIComponent(query))
             .then(r => r.json())
             .then(list => {
                 if (Array.isArray(list) && list.length && list[0].geometry && list[0].geometry.coordinates) {
-                    const c = list[0].geometry.coordinates;
-                    map.flyTo({ center: c, zoom: zoom, duration: 1200 });
-                    if (outline) showBanchiBox(c); else clearBanchiBox();
+                    arriveAt(list[0].geometry.coordinates, zoom, outline, label);
                     hideBusy();
                 } else {
-                    mapboxGeocodeFly(query, zoom, outline); // GSIで見つからなければMapboxへ
+                    mapboxGeocodeFly(query, zoom, outline, label); // GSIで見つからなければMapboxへ
                 }
             })
-            .catch(() => mapboxGeocodeFly(query, zoom, outline));
+            .catch(() => mapboxGeocodeFly(query, zoom, outline, label));
     }
-    function mapboxGeocodeFly(query, zoom, outline) {
+    function mapboxGeocodeFly(query, zoom, outline, label) {
         const url = 'https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(query)
             + '.json?access_token=' + encodeURIComponent(mapboxgl.accessToken)
             + '&country=jp&language=ja&limit=1&proximity=' + AREA_PROXIMITY;
         fetch(url).then(r => r.json()).then(data => {
             if (data && data.features && data.features.length) {
-                const c = data.features[0].center;
-                map.flyTo({ center: c, zoom: Math.min(zoom, 17), duration: 1200 });
-                if (outline) showBanchiBox(c); else clearBanchiBox();
+                arriveAt(data.features[0].center, Math.min(zoom, 17), outline, label);
             } else {
                 showToast('該当の場所が見つかりませんでした', true);
             }
         }).catch(() => showToast('住所検索に失敗しました', true)).finally(hideBusy);
     }
+    // 移動 → 街区を赤線で囲む（無ければ枠で代用）→ 地域名を表示
+    function arriveAt(center, zoom, outline, label) {
+        map.flyTo({ center: center, zoom: zoom, duration: 1200 });
+        if (outline) showBlockOrBox(center); else clearBanchiBox();
+        if (label) showAreaLabel(label);
+    }
 
-    // 選択した番地のあたりを赤枠で囲って表示する（中心点を基準に約70m四方の枠）。
-    // ※ GSIが返すのは番地の代表点のため、枠は「おおよその区画」を示す目安。
-    function showBanchiBox(center) {
-        const lng = center[0], lat = center[1];
-        const half = 35; // m（半辺）。70m四方の枠
-        const dLat = half / 111320;
-        const dLng = half / (111320 * Math.cos(lat * Math.PI / 180));
-        const poly = {
-            type: 'Feature',
-            geometry: { type: 'Polygon', coordinates: [[
-                [lng - dLng, lat - dLat], [lng + dLng, lat - dLat],
-                [lng + dLng, lat + dLat], [lng - dLng, lat + dLat],
-                [lng - dLng, lat - dLat]
-            ]] }
-        };
+    /* ── 街区(番)ポリゴン：OSMの道路から生成した blocks.geojson を読み込み、
+          番地代表点を内包する街区を赤線で囲む。見つからない場合は約70m四方の枠で代用。 ── */
+    let blocksData = null;
+    function loadBlocks() {
+        if (blocksData) return;
+        fetch('blocks.geojson').then(r => r.json())
+            .then(d => { blocksData = (d && d.features) ? d.features : []; })
+            .catch(() => { blocksData = []; }); // 取得失敗時は枠フォールバックで動作
+    }
+    // 点が多角形(外周リング)の内側かを判定（レイキャスティング）
+    function pointInRing(lng, lat, ring) {
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+            if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) inside = !inside;
+        }
+        return inside;
+    }
+    function findBlock(lng, lat) {
+        if (!blocksData) return null;
+        for (let k = 0; k < blocksData.length; k++) {
+            const g = blocksData[k].geometry;
+            const ring = g && g.coordinates && g.coordinates[0];
+            if (ring && pointInRing(lng, lat, ring)) return blocksData[k];
+        }
+        return null;
+    }
+    function boxFeature(center) {
+        const lng = center[0], lat = center[1], half = 35; // 約70m四方
+        const dLat = half / 111320, dLng = half / (111320 * Math.cos(lat * Math.PI / 180));
+        return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[
+            [lng - dLng, lat - dLat], [lng + dLng, lat - dLat],
+            [lng + dLng, lat + dLat], [lng - dLng, lat + dLat], [lng - dLng, lat - dLat]
+        ]] } };
+    }
+    function showBlockOrBox(center) {
+        const f = findBlock(center[0], center[1]) || boxFeature(center);
+        drawBanchiFeature(f);
+    }
+    function drawBanchiFeature(feature) {
         const draw = () => {
-            const src = map.getSource('banchi-box');
-            if (src) {
-                src.setData(poly);
+            if (map.getSource('banchi-box')) {
+                map.getSource('banchi-box').setData(feature);
             } else {
-                map.addSource('banchi-box', { type: 'geojson', data: poly });
+                map.addSource('banchi-box', { type: 'geojson', data: feature });
                 map.addLayer({ id: 'banchi-box-fill', type: 'fill', source: 'banchi-box',
-                    paint: { 'fill-color': '#e03131', 'fill-opacity': 0.08 } });
+                    paint: { 'fill-color': '#e03131', 'fill-opacity': 0.10 } });
                 map.addLayer({ id: 'banchi-box-line', type: 'line', source: 'banchi-box',
                     paint: { 'line-color': '#e03131', 'line-width': 3 } });
             }
         };
         if (map.isStyleLoaded()) draw(); else map.once('idle', draw);
     }
-    // 赤枠を消す（番地以外＝鹿骨町など、または非表示にしたいとき）
     function clearBanchiBox() {
         if (map.getSource('banchi-box')) {
             map.getSource('banchi-box').setData({ type: 'FeatureCollection', features: [] });
         }
+    }
+    // 画面上部に選択した地域名（番地まで）を約10秒表示する
+    let areaLabelTimer = null;
+    function showAreaLabel(text) {
+        const el = document.getElementById('area-label');
+        el.textContent = '📍 ' + text;
+        el.style.display = 'block';
+        clearTimeout(areaLabelTimer);
+        areaLabelTimer = setTimeout(() => { el.style.display = 'none'; }, 10000);
     }
 
     // ピンが多いときは画面内だけ描画して負荷を抑える（少なければ全件表示）
