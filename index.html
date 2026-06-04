@@ -306,6 +306,7 @@
         document.getElementById('area-nav-btn').style.display = 'none';
         document.getElementById('legend-panel').classList.remove('show');
         closeAreaNav();
+        clearBanchiBox();
         document.getElementById('login-overlay').classList.remove('hidden');
     }
 
@@ -541,10 +542,10 @@
     function selectArea(kind, val) {
         if (kind === 'district') {
             areaSel.district = val;
-            if (AREA_DATA[val] === null) {            // 丁目を持たない地区（鹿骨町）→ そのまま移動
+            if (AREA_DATA[val] === null) {            // 丁目を持たない地区（鹿骨町）→ そのまま移動（枠なし）
                 areaSel.chome = null;
                 closeAreaNav();
-                geocodeAndFly('東京都江戸川区' + val, 16);
+                geocodeAndFly('東京都江戸川区' + val, 16, false);
             } else {
                 renderAreaStep('chome');
             }
@@ -555,36 +556,77 @@
             // 例：「東京都江戸川区東小岩3-5」。GSIはこの丁目-番地表記を高精度に解決する。
             const query = '東京都江戸川区' + areaSel.district + areaSel.chome + '-' + val;
             closeAreaNav();
-            geocodeAndFly(query, 18);
+            geocodeAndFly(query, 18, true);
         }
     }
     // 住所をジオコーディングして地点へ移動。日本の番地に強い国土地理院(GSI)を優先し、失敗時のみMapbox。
-    function geocodeAndFly(query, zoom) {
+    // outline=true のとき、移動先の番地を赤枠で囲んで表示する。
+    function geocodeAndFly(query, zoom, outline) {
         zoom = zoom || 18;
         showBusy('検索中…');
         fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + encodeURIComponent(query))
             .then(r => r.json())
             .then(list => {
                 if (Array.isArray(list) && list.length && list[0].geometry && list[0].geometry.coordinates) {
-                    map.flyTo({ center: list[0].geometry.coordinates, zoom: zoom, duration: 1200 });
+                    const c = list[0].geometry.coordinates;
+                    map.flyTo({ center: c, zoom: zoom, duration: 1200 });
+                    if (outline) showBanchiBox(c); else clearBanchiBox();
                     hideBusy();
                 } else {
-                    mapboxGeocodeFly(query, zoom); // GSIで見つからなければMapboxへ
+                    mapboxGeocodeFly(query, zoom, outline); // GSIで見つからなければMapboxへ
                 }
             })
-            .catch(() => mapboxGeocodeFly(query, zoom));
+            .catch(() => mapboxGeocodeFly(query, zoom, outline));
     }
-    function mapboxGeocodeFly(query, zoom) {
+    function mapboxGeocodeFly(query, zoom, outline) {
         const url = 'https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(query)
             + '.json?access_token=' + encodeURIComponent(mapboxgl.accessToken)
             + '&country=jp&language=ja&limit=1&proximity=' + AREA_PROXIMITY;
         fetch(url).then(r => r.json()).then(data => {
             if (data && data.features && data.features.length) {
-                map.flyTo({ center: data.features[0].center, zoom: Math.min(zoom, 17), duration: 1200 });
+                const c = data.features[0].center;
+                map.flyTo({ center: c, zoom: Math.min(zoom, 17), duration: 1200 });
+                if (outline) showBanchiBox(c); else clearBanchiBox();
             } else {
                 showToast('該当の場所が見つかりませんでした', true);
             }
         }).catch(() => showToast('住所検索に失敗しました', true)).finally(hideBusy);
+    }
+
+    // 選択した番地のあたりを赤枠で囲って表示する（中心点を基準に約70m四方の枠）。
+    // ※ GSIが返すのは番地の代表点のため、枠は「おおよその区画」を示す目安。
+    function showBanchiBox(center) {
+        const lng = center[0], lat = center[1];
+        const half = 35; // m（半辺）。70m四方の枠
+        const dLat = half / 111320;
+        const dLng = half / (111320 * Math.cos(lat * Math.PI / 180));
+        const poly = {
+            type: 'Feature',
+            geometry: { type: 'Polygon', coordinates: [[
+                [lng - dLng, lat - dLat], [lng + dLng, lat - dLat],
+                [lng + dLng, lat + dLat], [lng - dLng, lat + dLat],
+                [lng - dLng, lat - dLat]
+            ]] }
+        };
+        const draw = () => {
+            const src = map.getSource('banchi-box');
+            if (src) {
+                src.setData(poly);
+            } else {
+                map.addSource('banchi-box', { type: 'geojson', data: poly });
+                map.addLayer({ id: 'banchi-box-fill', type: 'fill', source: 'banchi-box',
+                    paint: { 'fill-color': '#e03131', 'fill-opacity': 0.08 } });
+                map.addLayer({ id: 'banchi-box-line', type: 'line', source: 'banchi-box',
+                    paint: { 'line-color': '#e03131', 'line-width': 3 } });
+            }
+        };
+        if (map.isStyleLoaded()) draw(); else map.once('idle', draw);
+    }
+    // 赤枠を消す（番地以外＝鹿骨町など、または非表示にしたいとき）
+    function clearBanchiBox() {
+        if (map.getSource('banchi-box')) {
+            map.getSource('banchi-box').setData({ type: 'FeatureCollection', features: [] });
+        }
     }
 
     // ピンが多いときは画面内だけ描画して負荷を抑える（少なければ全件表示）
