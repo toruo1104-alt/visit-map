@@ -480,14 +480,24 @@
         if (el) el.style.display = 'none';
     }
 
-    /* ── 住所で移動（地区→丁目→番地を選んで、そのエリアの中心へ移動） ── */
+    /* ── 住所で移動（地区→丁目→番地を選んで、そのエリアの中心へ移動） ──
+       「住所の一覧.txt」を元に作成。値は { 丁目: 最大番地 }（番地は1〜最大の連番）。
+       null は丁目を持たない地区（例：鹿骨町）。 */
     const AREA_DATA = {
-        '東小岩': [1, 2, 3, 4, 5, 6, 7, 8],
-        '南小岩': [1, 2, 3, 4, 5, 6, 7, 8],
-        '鹿骨':   [1, 2, 3, 4, 5, 6]
+        '東小岩': { 1: 32, 2: 24, 3: 24, 4: 33 },
+        '北篠崎': { 1: 9, 2: 28 },
+        '南小岩': { 1: 15, 2: 23, 3: 29, 4: 18 },
+        '東松本': { 1: 16, 2: 18 },
+        '鹿骨町': null,
+        '鹿骨':   { 1: 63, 2: 45, 3: 20, 4: 33, 5: 40, 6: 10 },
+        '新堀':   { 1: 42, 2: 32 },
+        '春江町': { 1: 3 },
+        '谷河内': { 1: 20 },
+        '西篠崎': { 1: 20, 2: 27 },
+        '上篠崎': { 1: 25, 2: 27, 3: 17, 4: 30 },
+        '篠崎町': { 1: 44, 7: 31, 8: 15 }
     };
-    const AREA_BANCHI_MAX = 50; // 番地は1〜この数から選択（存在しない番地でも丁目周辺へ移動）
-    const AREA_PROXIMITY = '139.89036779018497,35.72063279470909'; // 検索の優先中心（既定中心）
+    const AREA_PROXIMITY = '139.89036779018497,35.72063279470909'; // Mapboxフォールバック検索の優先中心
     let areaSel = { district: null, chome: null };
 
     function openAreaNav() {
@@ -513,14 +523,15 @@
             title.textContent = areaSel.district + ' の丁目を選択';
             back.style.visibility = 'visible';
             back.onclick = () => renderAreaStep('district');
-            AREA_DATA[areaSel.district].forEach(c => {
+            Object.keys(AREA_DATA[areaSel.district]).forEach(c => {
                 html += `<button class="area-opt" onclick="selectArea('chome',${c})">${c}丁目</button>`;
             });
         } else if (step === 'banchi') {
             title.textContent = areaSel.district + areaSel.chome + '丁目 の番地を選択';
             back.style.visibility = 'visible';
             back.onclick = () => renderAreaStep('chome');
-            for (let b = 1; b <= AREA_BANCHI_MAX; b++) {
+            const maxB = AREA_DATA[areaSel.district][areaSel.chome];
+            for (let b = 1; b <= maxB; b++) {
                 html += `<button class="area-opt area-opt-num" onclick="selectArea('banchi',${b})">${b}</button>`;
             }
         }
@@ -528,23 +539,48 @@
         body.scrollTop = 0;
     }
     function selectArea(kind, val) {
-        if (kind === 'district') { areaSel.district = val; renderAreaStep('chome'); }
-        else if (kind === 'chome') { areaSel.chome = val; renderAreaStep('banchi'); }
-        else if (kind === 'banchi') {
-            const query = '東京都江戸川区' + areaSel.district + areaSel.chome + '丁目' + val;
+        if (kind === 'district') {
+            areaSel.district = val;
+            if (AREA_DATA[val] === null) {            // 丁目を持たない地区（鹿骨町）→ そのまま移動
+                areaSel.chome = null;
+                closeAreaNav();
+                geocodeAndFly('東京都江戸川区' + val, 16);
+            } else {
+                renderAreaStep('chome');
+            }
+        } else if (kind === 'chome') {
+            areaSel.chome = val;
+            renderAreaStep('banchi');
+        } else if (kind === 'banchi') {
+            // 例：「東京都江戸川区東小岩3-5」。GSIはこの丁目-番地表記を高精度に解決する。
+            const query = '東京都江戸川区' + areaSel.district + areaSel.chome + '-' + val;
             closeAreaNav();
-            geocodeAndFly(query);
+            geocodeAndFly(query, 18);
         }
     }
-    // 住所文字列をジオコーディングして、その地点を画面中心へ移動する
-    function geocodeAndFly(query) {
+    // 住所をジオコーディングして地点へ移動。日本の番地に強い国土地理院(GSI)を優先し、失敗時のみMapbox。
+    function geocodeAndFly(query, zoom) {
+        zoom = zoom || 18;
         showBusy('検索中…');
+        fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q=' + encodeURIComponent(query))
+            .then(r => r.json())
+            .then(list => {
+                if (Array.isArray(list) && list.length && list[0].geometry && list[0].geometry.coordinates) {
+                    map.flyTo({ center: list[0].geometry.coordinates, zoom: zoom, duration: 1200 });
+                    hideBusy();
+                } else {
+                    mapboxGeocodeFly(query, zoom); // GSIで見つからなければMapboxへ
+                }
+            })
+            .catch(() => mapboxGeocodeFly(query, zoom));
+    }
+    function mapboxGeocodeFly(query, zoom) {
         const url = 'https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(query)
             + '.json?access_token=' + encodeURIComponent(mapboxgl.accessToken)
             + '&country=jp&language=ja&limit=1&proximity=' + AREA_PROXIMITY;
         fetch(url).then(r => r.json()).then(data => {
             if (data && data.features && data.features.length) {
-                map.flyTo({ center: data.features[0].center, zoom: 17, duration: 1200 });
+                map.flyTo({ center: data.features[0].center, zoom: Math.min(zoom, 17), duration: 1200 });
             } else {
                 showToast('該当の場所が見つかりませんでした', true);
             }
