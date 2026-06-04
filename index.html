@@ -5,10 +5,21 @@
     <title>ボランティア訪問履歴マップ（決定版）</title>
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; user-select: none; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
-        
+
+        /* ログイン画面（サインインするまで地図を覆う） */
+        #login-overlay { position: absolute; inset: 0; z-index: 10000; background: #faf7f2; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+        #login-overlay.hidden { display: none; }
+        #login-overlay h1 { font-size: 20px; font-weight: bold; color: #2c3e50; margin: 0 0 8px; }
+        #login-overlay p { font-size: 13px; color: #666; margin: 0 0 24px; max-width: 320px; line-height: 1.6; }
+        #google-btn { min-height: 44px; }
+        #login-note { font-size: 11px; color: #999; margin-top: 16px; max-width: 320px; line-height: 1.5; }
+        /* サインアウト（右下の小ボタン） */
+        #signout-btn { position: absolute; bottom: 10px; right: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+
         /* ポップアップ共通 */
         .popup-content { width: 290px; max-height: 60vh; overflow-y: auto; font-size: 13px; color: #333; }
         .building-title { font-weight: bold; font-size: 15px; border-bottom: 2px solid #333; padding-bottom: 4px; margin-bottom: 8px; }
@@ -48,6 +59,16 @@
 
 <div id="map"></div>
 
+<!-- ログイン画面（サインインまで地図を覆う） -->
+<div id="login-overlay">
+    <h1>ボランティア訪問履歴マップ</h1>
+    <p>続行するには Google アカウントでサインインしてください。<br>スプレッドシートに共有されたアカウントのみ利用できます。</p>
+    <div id="google-btn"></div>
+    <div id="login-note">サインインできない場合は、管理者にこのアプリのスプレッドシートへの共有を依頼してください。</div>
+</div>
+
+<button id="signout-btn" onclick="signOut()" style="display:none;">サインアウト</button>
+
 <script>
     // 岡本様のトークンを設定済み
     const MY_TOKEN = 'pk.eyJ1IjoidG9ydW8xMTA0IiwiYSI6ImNtcHhiNHk5MTA0dXgycm9hY3F2NGQ5Nm0ifQ.qIgZvkXXSZWY1Mv9FszMJw';
@@ -57,28 +78,70 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyAwX2uQmpFFhh2WOi7dpy0Q6SO57OGivG35KHOqT7OEO2CDH23jWE60ZahT5Q-C20h/exec";
+    const GAS_API_URL = "YOUR_GAS_WEBAPP_URL_HERE";
+    // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
+    const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
-    let USER_EMAIL = '';
+    let ID_TOKEN = ''; // 「Googleで続ける」で取得した署名付きIDトークン(JWT)
 
-    // 起動時に利用者メールを入力（スプレッドシートの共有メンバーのみ利用可）。localStorageに保存。
-    (function initUser() {
-        let email = '';
-        try { email = localStorage.getItem('kuiki_user_email') || ''; } catch (e) {}
-        while (!email) {
-            email = (window.prompt('あなたのメールアドレスを入力してください\n（スプレッドシートの共有メンバーのみ利用できます）') || '').trim();
+    // GIS(アカウントライブラリ)の読み込み完了後にサインインボタンを初期化する
+    function initGoogleSignIn() {
+        if (!(window.google && google.accounts && google.accounts.id)) {
+            setTimeout(initGoogleSignIn, 300); // 読み込み待ち
+            return;
         }
-        USER_EMAIL = email;
-        try { localStorage.setItem('kuiki_user_email', email); } catch (e) {}
-    })();
+        google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: handleCredential,
+            auto_select: true
+        });
+        google.accounts.id.renderButton(document.getElementById('google-btn'), {
+            type: 'standard', theme: 'filled_black', size: 'large',
+            text: 'continue_with', shape: 'pill', logo_alignment: 'center'
+        });
+        google.accounts.id.prompt(); // One Tap（再訪ユーザーは自動サインイン）
+    }
+    window.addEventListener('load', initGoogleSignIn);
+
+    // サインイン成功時：IDトークンを保持し、地図データを読み込む
+    function handleCredential(res) {
+        ID_TOKEN = res.credential;
+        try {
+            const payload = JSON.parse(decodeURIComponent(escape(atob(
+                ID_TOKEN.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+            ))));
+            console.log('サインイン:', payload.email, payload.name);
+        } catch (e) {}
+        document.getElementById('login-overlay').classList.add('hidden');
+        document.getElementById('signout-btn').style.display = '';
+        loadDataFromSheet();
+    }
+
+    // サインアウト：トークンを破棄してログイン画面へ戻す
+    function signOut() {
+        ID_TOKEN = '';
+        try { google.accounts.id.disableAutoSelect(); } catch (e) {}
+        currentMarkers.forEach(function (m) { m.remove(); });
+        currentMarkers = [];
+        document.getElementById('signout-btn').style.display = 'none';
+        document.getElementById('login-overlay').classList.remove('hidden');
+    }
+
+    // ログイン画面を再表示（認証エラー時）
+    function showLogin() {
+        ID_TOKEN = '';
+        document.getElementById('signout-btn').style.display = 'none';
+        document.getElementById('login-overlay').classList.remove('hidden');
+        try { google.accounts.id.prompt(); } catch (e) {}
+    }
 
     // GAS API 呼び出し（fetch）。CORSプリフライト回避のため Content-Type は text/plain。
-    // 戻り値は成功時 res.data（= 旧 google.script.run の戻り値と同じ）の Promise。
+    // 認証は userEmail ではなく、検証可能な idToken(JWT) を送る。
     function apiCall(action, params) {
         return fetch(GAS_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(Object.assign({ action: action, userEmail: USER_EMAIL }, params || {}))
+            body: JSON.stringify(Object.assign({ action: action, idToken: ID_TOKEN }, params || {}))
         })
         .then(function (r) { return r.json(); })
         .then(function (res) {
@@ -188,7 +251,7 @@
         return { char: '📍', color: '#3FB1CE' }; // 未訪問
     }
 
-    map.on('load', () => { loadDataFromSheet(); });
+    map.on('load', () => { /* データ取得はサインイン成功後（handleCredential）に行う */ });
 
     // 入力フォームや詳細ポップアップが開いていれば閉じる。閉じたものがあれば true を返す。
     function closeOpenForms() {
@@ -429,17 +492,10 @@
     function handleServerError(err) {
         console.error('サーバーエラー:', err);
         const msg = (err && err.message) ? err.message : String(err);
-        // アクセス拒否時はメールを入力し直してもらう
-        if (msg.indexOf('Access Denied') >= 0 || msg.indexOf('利用権限') >= 0) {
-            try { localStorage.removeItem('kuiki_user_email'); } catch (e) {}
-            const re = (window.prompt('利用権限がありません。共有メンバーのメールアドレスを入力し直してください。') || '').trim();
-            if (re) {
-                USER_EMAIL = re;
-                try { localStorage.setItem('kuiki_user_email', re); } catch (e) {}
-                loadDataFromSheet();
-            } else {
-                showToast('アクセス権がありません。', true);
-            }
+        // 認証エラー（トークン無効・期限切れ・権限なし）はログイン画面へ戻す
+        if (msg.indexOf('Access Denied') >= 0 || msg.indexOf('利用権限') >= 0 || msg.indexOf('サインイン') >= 0) {
+            showToast('サインインが必要です（または利用権限がありません）。', true);
+            showLogin();
             return;
         }
         showToast('通信エラー: ' + msg, true);
