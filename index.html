@@ -22,6 +22,7 @@
         #signout-btn { position: absolute; bottom: 10px; left: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
         #legend-btn  { position: absolute; bottom: 10px; left: 110px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
         #area-nav-btn { position: absolute; bottom: 10px; left: 164px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        #reload-map-btn { position: absolute; top: 10px; left: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
         /* 住所で移動モーダル */
         #area-modal { position: absolute; inset: 0; z-index: 10002; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; padding: 16px; }
@@ -132,11 +133,11 @@
         body.xlarge-ui .clear-btn, body.xlarge-ui .save-btn { font-size: 15px !important; padding: 9px 14px !important; }
         body.xlarge-ui .history-box { font-size: 15px !important; }
 
-        /* ── 表示の重なり順：吹き出し ＞ 訪問先ピン ＞ GPS青ポチ ── */
-        .mapboxgl-popup { z-index: 50 !important; } /* 吹き出しは常に最前面（アイコンより前） */
-        .custom-marker { z-index: 3; }              /* 訪問先ピンは青ポチより前面 */
-        /* ── GPS現在地（青ポチ）の調整 ── */
-        .mapboxgl-user-location-dot { z-index: 1 !important; width: 11px !important; height: 11px !important; } /* 少し小さく＆背面 */
+        /* ── 表示の重なり順：吹き出し ＞ GPS青ポチ ＞ 訪問先ピン ── */
+        .mapboxgl-popup { z-index: 50 !important; } /* 吹き出しは常に最前面 */
+        .custom-marker { z-index: 3; }              /* 訪問先ピン */
+        /* ── GPS現在地（青ポチ）：見た目はピンより前面、ただしクリックは透過してピン操作を邪魔しない ── */
+        .mapboxgl-user-location-dot { z-index: 4 !important; pointer-events: none !important; width: 11px !important; height: 11px !important; }
         .mapboxgl-user-location-dot::after { width: 15px !important; height: 15px !important; } /* 白枠を本体に合わせて縮小 */
         .mapboxgl-user-location-dot::before { width: 11px !important; height: 11px !important; } /* 拍動する薄い青リングを一回り小さく復活 */
         .mapboxgl-user-location-accuracy-circle { display: none !important; } /* 周囲の薄い青（精度円）は引き続き非表示 */
@@ -158,6 +159,7 @@
 <button id="signout-btn" onclick="signOut()"   style="display:none;">サインアウト</button>
 <button id="legend-btn"  onclick="toggleLegend()" style="display:none;">凡例</button>
 <button id="area-nav-btn" onclick="openAreaNav()" style="display:none;">🔍住所</button>
+<button id="reload-map-btn" onclick="manualReloadMap()" style="display:none;">🔄地図再読込</button>
 
 <!-- 移動後に表示する地域名ラベル（常時表示・タップで枠/表示を消去） -->
 <div id="area-label" style="display:none;" onclick="askClearAreaSelection()"></div>
@@ -263,6 +265,7 @@
         document.getElementById('signout-btn').style.display = '';
         document.getElementById('legend-btn').style.display = '';
         document.getElementById('area-nav-btn').style.display = '';
+        document.getElementById('reload-map-btn').style.display = '';
         document.getElementById('scale-btn').style.display = '';
         updateScaleBtnText();
         loadBlocks(); // 街区ポリゴン(blocks.geojson)を先読み
@@ -343,6 +346,7 @@
         document.getElementById('scale-btn').style.display = 'none';
         document.getElementById('legend-btn').style.display = 'none';
         document.getElementById('area-nav-btn').style.display = 'none';
+        document.getElementById('reload-map-btn').style.display = 'none';
         document.getElementById('legend-panel').classList.remove('show');
         closeAreaNav();
         clearBanchiBox();
@@ -872,12 +876,21 @@
         if (e.key === 'Escape') closeOpenForms();
     });
 
-    // 他アプリから戻った（再表示された）ときに地図の描画を作り直す（背景化で消える対策）
+    // 地図の描画を作り直す（背景化で消える対策）。軽い処理のみ＝負荷ほぼなし。
+    function reloadMap() {
+        try { map.resize(); map.triggerRepaint(); } catch (e) {}
+    }
+    // 左上ボタンからの手動再読込（フィードバック付き）
+    function manualReloadMap() {
+        reloadMap();
+        showToast('地図を再読込しました', false);
+    }
+    // 他アプリから戻った（再表示された）ときに自動で再描画する。
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-            try { map.resize(); } catch (e) {}
-        }
+        if (document.visibilityState === 'visible') reloadMap();
     });
+    // bfcache（戻る/アプリ復帰）からの復元時も再描画
+    window.addEventListener('pageshow', () => reloadMap());
 
     // 新規登録フォーム生成
     function handleMapClickOrTap(lngLat, forcedType) {
