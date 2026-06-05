@@ -132,13 +132,14 @@
         body.xlarge-ui .clear-btn, body.xlarge-ui .save-btn { font-size: 15px !important; padding: 9px 14px !important; }
         body.xlarge-ui .history-box { font-size: 15px !important; }
 
+        /* ── 表示の重なり順：吹き出し ＞ 訪問先ピン ＞ GPS青ポチ ── */
+        .mapboxgl-popup { z-index: 50 !important; } /* 吹き出しは常に最前面（アイコンより前） */
+        .custom-marker { z-index: 3; }              /* 訪問先ピンは青ポチより前面 */
         /* ── GPS現在地（青ポチ）の調整 ── */
-        /* 訪問先ピンを青ポチより前面に（青ポチが邪魔でピン操作できない問題の対策） */
-        .custom-marker { z-index: 3; }
         .mapboxgl-user-location-dot { z-index: 1 !important; width: 11px !important; height: 11px !important; } /* 少し小さく＆背面 */
         .mapboxgl-user-location-dot::after { width: 15px !important; height: 15px !important; } /* 白枠を本体に合わせて縮小 */
-        .mapboxgl-user-location-dot::before { display: none !important; } /* 拍動する薄い青リングを消す */
-        .mapboxgl-user-location-accuracy-circle { display: none !important; } /* 周囲の薄い青（精度円）を消す */
+        .mapboxgl-user-location-dot::before { width: 11px !important; height: 11px !important; } /* 拍動する薄い青リングを一回り小さく復活 */
+        .mapboxgl-user-location-accuracy-circle { display: none !important; } /* 周囲の薄い青（精度円）は引き続き非表示 */
     </style>
 </head>
 <body>
