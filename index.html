@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ボランティア訪問履歴マップ（決定版）</title>
+    <title>map tool</title>
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -20,20 +20,21 @@
         #login-note { font-size: 11px; color: #999; margin-top: 16px; max-width: 320px; line-height: 1.5; }
         /* 下部ボタン群（サインアウト=左下、凡例=左下隣、文字サイズ=右下） */
         #signout-btn { position: absolute; bottom: 10px; left: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        #legend-btn  { position: absolute; bottom: 10px; left: 88px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        #area-nav-btn { position: absolute; bottom: 10px; left: 152px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        #legend-btn  { position: absolute; bottom: 10px; left: 110px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        #area-nav-btn { position: absolute; bottom: 10px; left: 164px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
         /* 住所で移動モーダル */
         #area-modal { position: absolute; inset: 0; z-index: 10002; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; padding: 16px; }
         #area-modal-card { background: #fff; border-radius: 10px; width: min(360px, 92vw); max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.3); overflow: hidden; }
         #area-modal-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #eee; }
         #area-modal-title { flex: 1; font-weight: bold; font-size: 14px; text-align: center; }
-        #area-back-btn, #area-close-btn { background: #f0f0f0; border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+        /* 左右ボタンを同じ幅にして、タイトルを常に中央に置く */
+        #area-back-btn, #area-close-btn { flex: 0 0 auto; min-width: 64px; text-align: center; background: #f0f0f0; border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
         #area-modal-body { padding: 12px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; }
         .area-opt { background: #5E9DB8; color: #fff; border: none; border-radius: 6px; padding: 10px 14px; font-size: 14px; cursor: pointer; min-width: 72px; }
         .area-opt-num { min-width: 0; width: 46px; padding: 9px 0; text-align: center; }
-        /* 移動後の地域名ラベル（画面上部） */
-        #area-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(224,49,49,0.95); color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); max-width: 90%; text-align: center; white-space: nowrap; }
+        /* 移動後の地域名ラベル（画面上部・常時表示・タップで枠/表示を消去） */
+        #area-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(44,62,80,0.92); color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); max-width: 92%; text-align: center; cursor: pointer; }
 
         /* ポップアップ共通 */
         .popup-content { width: 290px; max-height: 60vh; overflow-y: auto; font-size: 13px; color: #333; }
@@ -125,7 +126,7 @@
 
 <!-- ログイン画面（サインインまで地図を覆う） -->
 <div id="login-overlay">
-    <h1>ボランティア訪問履歴マップ</h1>
+    <h1>map tool</h1>
     <p>続行するには Google アカウントでサインインしてください。<br>スプレッドシートに共有されたアカウントのみ利用できます。</p>
     <div id="google-btn"></div>
     <div id="login-note">サインインできない場合は、管理者にこのアプリのスプレッドシートへの共有を依頼してください。</div>
@@ -136,11 +137,11 @@
 <button id="legend-btn"  onclick="toggleLegend()" style="display:none;">凡例</button>
 <button id="area-nav-btn" onclick="openAreaNav()" style="display:none;">🔍住所</button>
 
-<!-- 移動後に表示する地域名ラベル（約10秒） -->
-<div id="area-label" style="display:none;"></div>
+<!-- 移動後に表示する地域名ラベル（常時表示・タップで枠/表示を消去） -->
+<div id="area-label" style="display:none;" onclick="askClearAreaSelection()"></div>
 
-<!-- 住所で移動（地区→丁目→番地） -->
-<div id="area-modal">
+<!-- 住所で移動（地区→丁目→番地）。枠外タップで閉じる -->
+<div id="area-modal" onclick="if(event.target===this)closeAreaNav()">
     <div id="area-modal-card">
         <div id="area-modal-head">
             <button id="area-back-btn">← 戻る</button>
@@ -155,7 +156,6 @@
 <div id="legend-panel">
     <div style="font-weight:bold; margin-bottom:6px; font-size:12px;">🗺 凡例</div>
     <div style="font-weight:bold; font-size:10px; color:#666; margin-bottom:2px;">── 戸建てマーカー ──</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#6FAEC0; border-radius:50%;">📍</span>未訪問</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#333; border-radius:50%;">1</span>不在(1回目)</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#4A78B0; border-radius:50%;">2</span>不在(2回目)</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#333; border-radius:50%;">3</span>不在(3回目)</div>
@@ -170,7 +170,6 @@
     <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; border-radius:4px;"></span>混在</div>
     <div class="legend-row"><span class="legend-chip" style="background:#6FAEC0; border-radius:4px;"></span>不明</div>
     <div style="font-weight:bold; font-size:10px; color:#666; margin:6px 0 2px;">── 集合住宅セル ──</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#E6F1F4; border:1px solid #ccc;"></span>未訪問</div>
     <div class="legend-row"><span class="legend-chip" style="background:#CBE3F0; border:1px solid #ccc; color:#0d3c55;">1</span>不在(1回目)</div>
     <div class="legend-row"><span class="legend-chip" style="background:#A6CFE4; border:1px solid #ccc; color:#0d3c55;">2</span>不在(2回目)</div>
     <div class="legend-row"><span class="legend-chip" style="background:#7FB6D6; border:1px solid #ccc; color:#0d3c55;">3</span>不在(3回目)</div>
@@ -313,6 +312,7 @@
         document.getElementById('legend-panel').classList.remove('show');
         closeAreaNav();
         clearBanchiBox();
+        document.getElementById('area-label').style.display = 'none';
         document.getElementById('login-overlay').classList.remove('hidden');
     }
 
@@ -647,8 +647,7 @@
                 map.getSource('banchi-box').setData(feature);
             } else {
                 map.addSource('banchi-box', { type: 'geojson', data: feature });
-                map.addLayer({ id: 'banchi-box-fill', type: 'fill', source: 'banchi-box',
-                    paint: { 'fill-color': '#e03131', 'fill-opacity': 0.10 } });
+                // 赤線のみ（内側の網掛けは無し）
                 map.addLayer({ id: 'banchi-box-line', type: 'line', source: 'banchi-box',
                     paint: { 'line-color': '#e03131', 'line-width': 3 } });
             }
@@ -660,14 +659,18 @@
             map.getSource('banchi-box').setData({ type: 'FeatureCollection', features: [] });
         }
     }
-    // 画面上部に選択した地域名（番地まで）を約10秒表示する
-    let areaLabelTimer = null;
+    // 画面上部に選択した地域名（番地まで）を常時表示する（タップで消去できる）
     function showAreaLabel(text) {
         const el = document.getElementById('area-label');
-        el.textContent = '📍 ' + text;
+        el.innerHTML = '📍 ' + text + ' <span style="font-size:10px; opacity:0.85;">（タップで消去）</span>';
         el.style.display = 'block';
-        clearTimeout(areaLabelTimer);
-        areaLabelTimer = setTimeout(() => { el.style.display = 'none'; }, 10000);
+    }
+    // ラベルをタップ → 枠線と住所表示を消すか確認してクリア
+    function askClearAreaSelection() {
+        if (confirm('枠線と住所表示を消しますか？')) {
+            clearBanchiBox();
+            document.getElementById('area-label').style.display = 'none';
+        }
     }
 
     // ピンが多いときは画面内だけ描画して負荷を抑える（少なければ全件表示）
@@ -838,6 +841,7 @@
         if (forcedType === '戸建て') {
             formHtml += `
                 <div class="building-title">📍 戸建てを新規登録</div>
+                <div id="new-addr-hint" style="font-size:10px; color:#888; margin:-2px 0 6px;">📍 住所を取得中…</div>
                 <div class="inline-group">
                     <label>属性</label>
                     <select id="new-attribute-k" style="background:#d2d2d2;">
@@ -861,6 +865,7 @@
         } else {
             formHtml += `
                 <div class="building-title">🏢 集合住宅を新規登録</div>
+                <div id="new-addr-hint" style="font-size:10px; color:#888; margin:-2px 0 6px;">📍 住所を取得中…</div>
                 <div class="form-group"><label>建物名</label><input type="text" id="new-name" placeholder="例：ハイツ小岩"></div>
                 <div class="form-row" style="display:flex; gap:4px;">
                     <div class="form-group" style="flex:1;"><label>階数</label>
@@ -897,6 +902,29 @@
 
         // 集合住宅はグリッドを後から生成するため、生成後に高さが変わる→再度フィットさせる
         if (forcedType === '集合住宅') { setTimeout(generateSetupGrid, 100); }
+
+        // この地点の住所（丁目まで）を取得し、補足として小さく表示する
+        reverseGeocodeAddr(latVal, lngVal, function (addr) {
+            const el = document.getElementById('new-addr-hint');
+            if (el) el.textContent = addr ? ('📍 ' + addr + ' 付近') : '';
+        });
+    }
+
+    // 緯度経度→住所（国土地理院リバースジオコーダ。丁目まで取得可）
+    const MUNI_MAP = {
+        '13123': '東京都江戸川区', '13122': '東京都葛飾区', '13108': '東京都江東区', '13107': '東京都墨田区',
+        '12203': '千葉県市川市', '12227': '千葉県浦安市', '12207': '千葉県松戸市'
+    };
+    function reverseGeocodeAddr(lat, lng, cb) {
+        fetch('https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=' + lat + '&lon=' + lng)
+            .then(r => r.json())
+            .then(d => {
+                const r = d && d.results;
+                if (r && r.lv01Nm && r.lv01Nm !== '－' && r.lv01Nm !== '-') {
+                    cb((MUNI_MAP[r.muniCd] || '') + r.lv01Nm);
+                } else { cb(null); }
+            })
+            .catch(() => cb(null));
     }
 
     // グリッドの現在の階数・最大部屋番号を取得
