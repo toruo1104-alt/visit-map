@@ -131,6 +131,14 @@
         body.xlarge-ui .submit-btn { padding: 14px !important; font-size: 18px !important; }
         body.xlarge-ui .clear-btn, body.xlarge-ui .save-btn { font-size: 15px !important; padding: 9px 14px !important; }
         body.xlarge-ui .history-box { font-size: 15px !important; }
+
+        /* ── GPS現在地（青ポチ）の調整 ── */
+        /* 訪問先ピンを青ポチより前面に（青ポチが邪魔でピン操作できない問題の対策） */
+        .custom-marker { z-index: 3; }
+        .mapboxgl-user-location-dot { z-index: 1 !important; width: 11px !important; height: 11px !important; } /* 少し小さく＆背面 */
+        .mapboxgl-user-location-dot::after { width: 15px !important; height: 15px !important; } /* 白枠を本体に合わせて縮小 */
+        .mapboxgl-user-location-dot::before { display: none !important; } /* 拍動する薄い青リングを消す */
+        .mapboxgl-user-location-accuracy-circle { display: none !important; } /* 周囲の薄い青（精度円）を消す */
     </style>
 </head>
 <body>
@@ -385,7 +393,8 @@
     map.addControl(new mapboxgl.GeolocateControl({
         positionOptions: { enableHighAccuracy: true },
         trackUserLocation: true,
-        showUserHeading: true
+        showUserHeading: true,
+        showAccuracyCircle: false // 周囲の薄い青（精度円）は表示しない
     }), 'top-right');
 
     let currentMarkers = [];
