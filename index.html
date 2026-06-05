@@ -118,6 +118,19 @@
         body.large-ui .submit-btn { padding: 12px !important; font-size: 16px !important; }
         body.large-ui .clear-btn, body.large-ui .save-btn { font-size: 13px !important; padding: 7px 12px !important; }
         body.large-ui .history-box { font-size: 13px !important; }
+
+        /* ── 手動「特大」モード ── */
+        body.xlarge-ui .popup-content { width: min(400px, 98vw) !important; font-size: 18px !important; }
+        body.xlarge-ui .building-title { font-size: 21px !important; }
+        body.xlarge-ui .grid-table { font-size: 16px !important; }
+        body.xlarge-ui .grid-floor { font-size: 14px !important; }
+        body.xlarge-ui .form-group label { font-size: 16px !important; }
+        body.xlarge-ui .form-group input, body.xlarge-ui .form-group select, body.xlarge-ui .form-group textarea { font-size: 17px !important; padding: 9px !important; }
+        body.xlarge-ui .inline-group label { font-size: 16px !important; }
+        body.xlarge-ui .inline-group select { font-size: 17px !important; padding: 9px !important; }
+        body.xlarge-ui .submit-btn { padding: 14px !important; font-size: 18px !important; }
+        body.xlarge-ui .clear-btn, body.xlarge-ui .save-btn { font-size: 15px !important; padding: 9px 14px !important; }
+        body.xlarge-ui .history-box { font-size: 15px !important; }
     </style>
 </head>
 <body>
@@ -241,9 +254,8 @@
         document.getElementById('signout-btn').style.display = '';
         document.getElementById('legend-btn').style.display = '';
         document.getElementById('area-nav-btn').style.display = '';
-        const scaleBtnEl = document.getElementById('scale-btn');
-        scaleBtnEl.style.display = '';
-        scaleBtnEl.textContent = document.body.classList.contains('large-ui') ? '文字：大' : '文字：標準';
+        document.getElementById('scale-btn').style.display = '';
+        updateScaleBtnText();
         loadBlocks(); // 街区ポリゴン(blocks.geojson)を先読み
         loadDataFromSheet();
     }
@@ -273,16 +285,29 @@
     });
 
     function initScale() {
-        if (localStorage.getItem('uiScale') === 'large') {
-            document.body.classList.add('large-ui');
-        }
+        const s = localStorage.getItem('uiScale');
+        if (s === 'large') document.body.classList.add('large-ui');
+        else if (s === 'xlarge') document.body.classList.add('xlarge-ui');
     }
 
+    // 現在のモードに応じてボタン表示を更新
+    function updateScaleBtnText() {
+        const b = document.body;
+        const t = b.classList.contains('xlarge-ui') ? '文字：特大'
+                : b.classList.contains('large-ui') ? '文字：大' : '文字：標準';
+        document.getElementById('scale-btn').textContent = t;
+    }
+
+    // タップで 標準 → 大 → 特大 → 標準 と循環
     function toggleScale() {
-        const isLarge = document.body.classList.toggle('large-ui');
-        localStorage.setItem('uiScale', isLarge ? 'large' : 'normal');
-        document.getElementById('scale-btn').textContent = isLarge ? '文字：大' : '文字：標準';
-        applyZoomScale(); // マーカーサイズを大/小モードに合わせて更新
+        const b = document.body;
+        let next;
+        if (b.classList.contains('xlarge-ui')) { b.classList.remove('xlarge-ui'); next = 'normal'; }
+        else if (b.classList.contains('large-ui')) { b.classList.remove('large-ui'); b.classList.add('xlarge-ui'); next = 'xlarge'; }
+        else { b.classList.add('large-ui'); next = 'large'; }
+        localStorage.setItem('uiScale', next);
+        updateScaleBtnText();
+        applyZoomScale(); // マーカーサイズもモードに合わせて更新
     }
 
     // サインイン成功時：IDトークンを保持・保存し、地図データを読み込む
@@ -355,6 +380,13 @@
 
     // 右上にコンパス（クリックで北が上に戻る）
     map.addControl(new mapboxgl.NavigationControl({ showZoom: false, showCompass: true, visualizePitch: true }), 'top-right');
+
+    // 現在地（青ポチ表示＋押すと現在地へフォーカス）。コンパスの下に追加される。
+    map.addControl(new mapboxgl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
+        trackUserLocation: true,
+        showUserHeading: true
+    }), 'top-right');
 
     let currentMarkers = [];
     let activeNewMarker = null;
@@ -450,16 +482,17 @@
         const zoom = map.getZoom();
         // 高ズーム(最大付近)ほど大きく：19以上=130%, 18=115%, 17=100%, 16=85%, 15=70%, それ以下=55%
         const scale = zoom >= 19 ? 1.30 : zoom >= 18 ? 1.15 : zoom >= 17 ? 1.0 : zoom >= 16 ? 0.85 : zoom >= 15 ? 0.70 : 0.55;
-        const isLarge = document.body.classList.contains('large-ui');
+        const tier = document.body.classList.contains('xlarge-ui') ? 'x'
+                   : document.body.classList.contains('large-ui') ? 'l' : 'n';
         currentMarkers.forEach(m => {
             const el = m.getElement();
             if (el.classList.contains('marker-kodedate')) {
-                const base = isLarge ? { w: 34, f: 19 } : { w: 24, f: 13 };
+                const base = tier === 'x' ? { w: 42, f: 24 } : tier === 'l' ? { w: 34, f: 19 } : { w: 24, f: 13 };
                 const star = el.classList.contains('marker-star');
                 el.style.width = el.style.height = Math.round(base.w * scale * (star ? 1.45 : 1)) + 'px';
                 el.style.fontSize = Math.round(base.f * scale * (star ? 1.05 : 1)) + 'px';
             } else if (el.classList.contains('marker-shuga')) {
-                const base = isLarge ? { w: 38, f: 21 } : { w: 28, f: 16 };
+                const base = tier === 'x' ? { w: 46, f: 26 } : tier === 'l' ? { w: 38, f: 21 } : { w: 28, f: 16 };
                 el.style.width = el.style.height = Math.round(base.w * scale) + 'px';
                 el.style.fontSize = Math.round(base.f * scale) + 'px';
             }
@@ -470,6 +503,14 @@
     function toggleLegend() {
         document.getElementById('legend-panel').classList.toggle('show');
     }
+    // 凡例が開いているとき、パネル外（凡例ボタン以外）をタップしたら閉じる
+    document.addEventListener('click', (e) => {
+        const panel = document.getElementById('legend-panel');
+        const btn = document.getElementById('legend-btn');
+        if (panel.classList.contains('show') && !panel.contains(e.target) && e.target !== btn) {
+            panel.classList.remove('show');
+        }
+    });
 
     // ── 処理中インジケーター（サーバー通信中に「動いている」ことを示す） ──
     function showBusy(msg) {
@@ -662,7 +703,7 @@
     // 画面上部に選択した地域名（番地まで）を常時表示する（タップで消去できる）
     function showAreaLabel(text) {
         const el = document.getElementById('area-label');
-        el.innerHTML = '📍 ' + text + ' <span style="font-size:10px; opacity:0.85;">（タップで消去）</span>';
+        el.textContent = '📍 ' + text;
         el.style.display = 'block';
     }
     // ラベルをタップ → 枠線と住所表示を消すか確認してクリア
@@ -841,7 +882,6 @@
         if (forcedType === '戸建て') {
             formHtml += `
                 <div class="building-title">📍 戸建てを新規登録</div>
-                <div id="new-addr-hint" style="font-size:10px; color:#888; margin:-2px 0 6px;">📍 住所を取得中…</div>
                 <div class="inline-group">
                     <label>属性</label>
                     <select id="new-attribute-k" style="background:#d2d2d2;">
@@ -865,7 +905,6 @@
         } else {
             formHtml += `
                 <div class="building-title">🏢 集合住宅を新規登録</div>
-                <div id="new-addr-hint" style="font-size:10px; color:#888; margin:-2px 0 6px;">📍 住所を取得中…</div>
                 <div class="form-group"><label>建物名</label><input type="text" id="new-name" placeholder="例：ハイツ小岩"></div>
                 <div class="form-row" style="display:flex; gap:4px;">
                     <div class="form-group" style="flex:1;"><label>階数</label>
@@ -902,29 +941,6 @@
 
         // 集合住宅はグリッドを後から生成するため、生成後に高さが変わる→再度フィットさせる
         if (forcedType === '集合住宅') { setTimeout(generateSetupGrid, 100); }
-
-        // この地点の住所（丁目まで）を取得し、補足として小さく表示する
-        reverseGeocodeAddr(latVal, lngVal, function (addr) {
-            const el = document.getElementById('new-addr-hint');
-            if (el) el.textContent = addr ? ('📍 ' + addr + ' 付近') : '';
-        });
-    }
-
-    // 緯度経度→住所（国土地理院リバースジオコーダ。丁目まで取得可）
-    const MUNI_MAP = {
-        '13123': '東京都江戸川区', '13122': '東京都葛飾区', '13108': '東京都江東区', '13107': '東京都墨田区',
-        '12203': '千葉県市川市', '12227': '千葉県浦安市', '12207': '千葉県松戸市'
-    };
-    function reverseGeocodeAddr(lat, lng, cb) {
-        fetch('https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=' + lat + '&lon=' + lng)
-            .then(r => r.json())
-            .then(d => {
-                const r = d && d.results;
-                if (r && r.lv01Nm && r.lv01Nm !== '－' && r.lv01Nm !== '-') {
-                    cb((MUNI_MAP[r.muniCd] || '') + r.lv01Nm);
-                } else { cb(null); }
-            })
-            .catch(() => cb(null));
     }
 
     // グリッドの現在の階数・最大部屋番号を取得
