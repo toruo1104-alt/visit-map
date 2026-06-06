@@ -111,10 +111,10 @@
         }
 
         /* ── 手動「大」モード（＝旧「特大」相当。マーカーサイズはJS管理） ── */
-        /* 吹き出しの最大幅は画面幅よりちょい狭いくらい(96vw) */
-        body.large-ui .popup-content { width: min(460px, 96vw) !important; font-size: 18px !important; }
+        /* 「大」でも横幅は「標準」と同じに保つ（width 指定なし＝標準幅を継承）。文字だけ大きくする */
+        body.large-ui .popup-content { font-size: 18px !important; }
         body.large-ui .building-title { font-size: 21px !important; }
-        body.large-ui .grid-table { font-size: 16px !important; }
+        body.large-ui .grid-table { font-size: 22px !important; } /* 集合住宅セルの文字を2周り大きく */
         body.large-ui .grid-floor { font-size: 14px !important; }
         body.large-ui .form-group label { font-size: 16px !important; }
         body.large-ui .form-group input, body.large-ui .form-group select, body.large-ui .form-group textarea { font-size: 17px !important; padding: 9px !important; }
@@ -130,6 +130,8 @@
               ※集合住宅グリッドのセル横スクロール(.grid-scroll の overflow-x:auto)は簡易表示でも従来どおり維持する。 */
         .popup-content:not(.detail) .detail-only { display: none !important; }
         .popup-content:not(.detail) .memo-empty { display: none !important; }
+        /* 詳細表示は項目が多いので、縦を長めにしてスクロールを減らす */
+        .popup-content.detail { max-height: 82vh !important; }
         .detail-toggle { width: 100%; margin-top: 8px; padding: 7px; background: #4A78B0; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
         body.large-ui .detail-toggle { font-size: 17px !important; padding: 12px !important; }
 
@@ -474,7 +476,7 @@
         const mapH = map.getContainer().clientHeight;
         const pad = 12, tip = 28; // 吹き出し口ぶんの余白
         let popupH = (content ? content.getBoundingClientRect().height : mapH * 0.4) + (reservePx || 0);
-        popupH = Math.min(popupH, mapH * 0.62); // 吹き出しは最大でも約60vh（中はスクロール）
+        popupH = Math.min(popupH, mapH * 0.82); // 吹き出しは最大でも約82vh（詳細表示の縦長に合わせる）
         // 吹き出し上端を画面の上から topMargin の位置に合わせる。
         //   吹き出し上端Y = ピン画面Y − tip − popupH、ピン画面Y = mapH/2 + oy
         //   → oy = topMargin + tip + popupH − mapH/2
