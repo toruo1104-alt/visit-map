@@ -400,8 +400,8 @@
         // 制御側の自動カメラ移動の後に上書きしたいので少し遅延させる
         setTimeout(() => {
             if (!geoActive) return;
-            if (first) map.flyTo({ center: c, zoom: 21, duration: 1200 });  // 初回：住所検索と同じ動き
-            else map.easeTo({ center: c, zoom: 21, duration: 250 });        // 追従：ズーム21を維持
+            if (first) map.flyTo({ center: c, zoom: 18, duration: 1200 });  // 初回：住所検索と同じ動き
+            else map.easeTo({ center: c, zoom: 18, duration: 250 });        // 追従：ズーム21を維持
         }, 70);
     });
 
