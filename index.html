@@ -1456,7 +1456,7 @@
             popup.on('open', () => {
                 if (isShuga) resetRoomActionPanel(popup);
                 fillDerivedAddress(popup.getElement()); // 住所（街区内包方式）を算出して表示
-                fitPopupInView(marker, isShuga ? 140 : 0);
+                fitPopupInView(marker, 0); // 部屋操作欄は最初から高さを確保するので追加余白は不要
             });
             // 吹き出しを閉じたら、選択中の部屋ハイライトを消し、操作欄を初期表示に戻す（選択状態を解除）
             popup.on('close', () => resetRoomActionPanel(popup));
@@ -1581,7 +1581,7 @@
                 管理人: ${first.管理人} ｜ 構成: ${first.属性} ｜ オートロック: ${getAutolock(first)}
             </div>
             ${gridHtml}
-            <div id="room-action-area" style="margin-top:8px; border:1px solid #6FAEC0; padding:6px; background:#f0f7f9;">${roomActionPlaceholder()}</div>
+            <div id="room-action-area" style="margin-top:8px; border:1px solid #6FAEC0; padding:6px; background:#f0f7f9; min-height:200px;">${roomActionPlaceholder()}</div>
 
             <div class="memo-section${memoCls}">
                 <label style="font-size:11px; font-weight:bold;">メモ</label>
@@ -1701,9 +1701,9 @@
         }
     }
 
-    // 部屋未選択時の操作欄プレースホルダ（部屋を選ぶ前から欄を表示。約4行分の高さを確保）
+    // 部屋未選択時の操作欄プレースホルダ（押した後とおおよそ同じ高さを確保し、レイアウトの変動を抑える）
     function roomActionPlaceholder() {
-        return '<div style="min-height:84px; display:flex; align-items:center; justify-content:center; font-size:11px; color:#888; text-align:center;">🚪 部屋をタップして操作してください</div>';
+        return '<div style="min-height:180px; display:flex; align-items:center; justify-content:center; font-size:13px; color:#888; text-align:center;">🚪 部屋をタップして操作してください</div>';
     }
 
     // 吹き出しを閉じたときに、部屋の選択ハイライトと操作欄を初期状態へ戻す（選択状態を解除）。
