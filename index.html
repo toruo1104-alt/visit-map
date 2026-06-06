@@ -258,9 +258,17 @@
         document.getElementById('area-nav-btn').style.display = '';
         document.getElementById('scale-btn').style.display = '';
         updateScaleBtnText();
-        loadBlocks();      // 街区ポリゴン(blocks.geojson)を先読み
+        const blocksReady = loadBlocks(); // 街区ポリゴン(blocks.geojson)を先読み
         loadAddrPoints();  // 番地代表点(address_points.json)を先読み（住所の逆算用）
         loadDataFromSheet();
+        // 外部リンク(?area=...)で来た場合は、地図と街区データの準備後にその番地を表示する
+        if (DEEP_LINK_AREA && !deepLinkDone) {
+            deepLinkDone = true;
+            blocksReady.then(() => {
+                if (map.loaded()) runAreaDeepLink(DEEP_LINK_AREA);
+                else map.once('load', () => runAreaDeepLink(DEEP_LINK_AREA));
+            });
+        }
     }
 
     // GIS(アカウントライブラリ)の読み込み完了後にサインインボタンを初期化する
@@ -366,6 +374,10 @@
             return res.data;
         });
     }
+
+    // ポータル等の外部リンク（?area=東小岩3丁目5番）で来たとき、その番地を自動表示するための値
+    const DEEP_LINK_AREA = new URLSearchParams(location.search).get('area');
+    let deepLinkDone = false;
 
     const map = new mapboxgl.Map({
         container: 'map',
@@ -694,6 +706,20 @@
             }
         }
     }
+    // 外部リンク(?area=ラベル)で渡された番地を表示する（赤枠表示のみ。割当はしない）。
+    // area は既知の地区(AREA_DATA)に照合し、ラベルは地区名＋数字から組み直す（不正値・XSS対策）。
+    function runAreaDeepLink(area) {
+        area = (area || '').trim();
+        const m = area.match(/^(.+?)(\d+)丁目(\d+)番$/);
+        if (m && AREA_DATA[m[1]]) {                              // 例「東小岩3丁目5番」：番地へズーム＋赤枠
+            const label = m[1] + m[2] + '丁目' + m[3] + '番';
+            geocodeAndFly('東京都江戸川区' + m[1] + m[2] + '-' + m[3], 18, true, label);
+        } else if (AREA_DATA.hasOwnProperty(area) && AREA_DATA[area] === null) {
+            geocodeAndFly('東京都江戸川区' + area, 16, false, area); // 鹿骨町（丁目なし）：地区へ移動
+        } else {
+            showToast('リンクの住所が見つかりませんでした', true);
+        }
+    }
     // 住所をジオコーディングして地点へ移動。日本の番地に強い国土地理院(GSI)を優先し、失敗時のみMapbox。
     // outline=true のとき、移動先の番地を含む街区を赤線で囲む。label を画面上部に約10秒表示。
     // onArrive: 到着後（枠描画後）に実行する処理。長押しの一括割当などに使う。
@@ -785,8 +811,8 @@
           番地代表点を内包する街区を赤線で囲む。見つからない場合は約70m四方の枠で代用。 ── */
     let blocksData = null;
     function loadBlocks() {
-        if (blocksData) return;
-        fetch('blocks.geojson').then(r => r.json())
+        if (blocksData) return Promise.resolve();
+        return fetch('blocks.geojson').then(r => r.json())
             .then(d => { blocksData = (d && d.features) ? d.features : []; })
             .catch(() => { blocksData = []; }); // 取得失敗時は枠フォールバックで動作
     }
