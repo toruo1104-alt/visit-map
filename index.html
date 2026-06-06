@@ -31,7 +31,7 @@
         /* 左右ボタンを同じ幅にして、タイトルを常に中央に置く */
         #area-back-btn, #area-close-btn { flex: 0 0 auto; min-width: 64px; text-align: center; background: #f0f0f0; border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
         #area-modal-body { padding: 12px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; }
-        .area-opt { background: #5E9DB8; color: #fff; border: none; border-radius: 6px; padding: 10px 14px; font-size: 14px; cursor: pointer; min-width: 72px; }
+        .area-opt { background: #5E9DB8; color: #fff; border: none; border-radius: 6px; padding: 10px 14px; font-size: 14px; cursor: pointer; min-width: 72px; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
         .area-opt-num { min-width: 0; width: 46px; padding: 9px 0; text-align: center; }
         /* 移動後の地域名ラベル（画面上部・常時表示・タップで枠/表示を消去） */
         #area-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(44,62,80,0.92); color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); max-width: 92%; text-align: center; cursor: pointer; }
@@ -91,6 +91,8 @@
         .inline-group select { flex: 1; box-sizing: border-box; padding: 4px; font-size: 12px; }
 
         /* ── 処理中インジケーター（サーバー通信中に表示） ── */
+        /* 更新中の操作ブロック用オーバーレイ（クリックを吸収して操作不可にする） */
+        #busy-overlay { position: absolute; inset: 0; z-index: 10000; background: rgba(0,0,0,0.06); display: none; cursor: progress; }
         #busy-indicator { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10001; background: rgba(44,62,80,0.92); color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 14px; display: none; align-items: center; gap: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
         #busy-indicator .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: busy-spin 0.7s linear infinite; }
         @keyframes busy-spin { to { transform: rotate(360deg); } }
@@ -380,7 +382,8 @@
         positionOptions: { enableHighAccuracy: true },
         trackUserLocation: true,
         showUserHeading: true,
-        showAccuracyCircle: false // 周囲の薄い青（精度円）は表示しない
+        showAccuracyCircle: false,        // 周囲の薄い青（精度円）は表示しない
+        fitBoundsOptions: { maxZoom: 18.7 } // 現在地へ寄った時のズーム（番地が画面の8割程度に）
     }), 'top-right');
 
     let currentMarkers = [];
@@ -507,8 +510,17 @@
         }
     });
 
-    // ── 処理中インジケーター（サーバー通信中に「動いている」ことを示す） ──
+    // ── 処理中インジケーター（サーバー通信中は全画面オーバーレイで操作をブロック） ──
     function showBusy(msg) {
+        // 操作をブロックする全画面オーバーレイ
+        let ov = document.getElementById('busy-overlay');
+        if (!ov) {
+            ov = document.createElement('div');
+            ov.id = 'busy-overlay';
+            document.body.appendChild(ov);
+        }
+        ov.style.display = 'block';
+        // スピナー＋メッセージ
         let el = document.getElementById('busy-indicator');
         if (!el) {
             el = document.createElement('div');
@@ -521,6 +533,8 @@
     function hideBusy() {
         const el = document.getElementById('busy-indicator');
         if (el) el.style.display = 'none';
+        const ov = document.getElementById('busy-overlay');
+        if (ov) ov.style.display = 'none';
     }
 
     /* ── 住所で移動（地区→丁目→番地を選んで、そのエリアの中心へ移動） ──
@@ -594,19 +608,28 @@
             });
         }
     }
-    // タップと長押しを区別してハンドラを割り当てる（スクロールで誤発火しないよう移動でキャンセル）
+    // タップと長押しを区別してハンドラを割り当てる。
+    // ※ pointercancel はモバイルの長押し（コールアウト）開始時に誤発火するため使わず、
+    //   touch / mouse イベントで実装。スクロール（移動）でキャンセル、touchendはpreventDefaultで合成clickを抑止。
     function attachLongPress(el, onTap, onLong) {
         let timer = null, longFired = false, sx = 0, sy = 0, moved = false;
-        el.addEventListener('pointerdown', (e) => {
-            longFired = false; moved = false; sx = e.clientX; sy = e.clientY;
-            timer = setTimeout(() => { longFired = true; onLong(); }, 550);
-        });
-        el.addEventListener('pointermove', (e) => {
-            if (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10) { moved = true; clearTimeout(timer); }
-        });
-        el.addEventListener('pointerup', () => { clearTimeout(timer); if (!longFired && !moved) onTap(); });
-        el.addEventListener('pointercancel', () => clearTimeout(timer));
-        el.addEventListener('pointerleave', () => clearTimeout(timer));
+        const begin = (x, y) => {
+            longFired = false; moved = false; sx = x; sy = y;
+            clearTimeout(timer);
+            timer = setTimeout(() => { longFired = true; onLong(); }, 500);
+        };
+        const movecheck = (x, y) => {
+            if (Math.abs(x - sx) > 10 || Math.abs(y - sy) > 10) { moved = true; clearTimeout(timer); }
+        };
+        const finish = () => { clearTimeout(timer); if (!longFired && !moved) onTap(); };
+        el.addEventListener('touchstart', (e) => { const t = e.touches[0]; begin(t.clientX, t.clientY); }, { passive: true });
+        el.addEventListener('touchmove', (e) => { const t = e.touches[0]; if (t) movecheck(t.clientX, t.clientY); }, { passive: true });
+        el.addEventListener('touchend', (e) => { e.preventDefault(); finish(); });
+        el.addEventListener('mousedown', (e) => begin(e.clientX, e.clientY));
+        el.addEventListener('mousemove', (e) => { if (timer) movecheck(e.clientX, e.clientY); });
+        el.addEventListener('mouseup', finish);
+        el.addEventListener('mouseleave', () => clearTimeout(timer));
+        el.addEventListener('contextmenu', (e) => e.preventDefault()); // 長押しメニューを抑止
     }
     // 長押し：その番地へ移動して枠を出し、枠内ピンに住所を一括割当する
     function selectAreaAssign(district, chome, banchi) {
@@ -1531,13 +1554,14 @@
         };
 
         btn.disabled = true; btn.innerText = '保存中...';
+        showBusy('更新中…');
         apiCall('updateBuilding', { data: data }).then((latest) => {
             showToast('建物情報を更新しました', false);
             renderMarkers(latest);
         }).catch((err) => {
             btn.disabled = false; btn.innerText = '更新を保存';
             handleServerError(err);
-        });
+        }).finally(hideBusy);
     }
 
     // 編集をキャンセルして詳細表示に戻す（更新しない）
@@ -1712,19 +1736,25 @@
     // ピン（地点）の削除。実行前に必ず確認する
     function confirmDelete(rowNumber) {
         if (!confirm("このピンを削除します。\n登録内容・履歴もすべて消え、元に戻せません。\n\n削除してよろしいですか？")) return;
+        showBusy('更新中…');
         apiCall('deleteLocation', { rowNumber: rowNumber })
             .then((latest) => { showToast('削除しました', false); renderMarkers(latest); })
-            .catch(handleServerError);
+            .catch(handleServerError).finally(hideBusy);
     }
 
     function saveMemo(rowNumber) {
         const txt = document.getElementById(`memo-${rowNumber}`).value;
-        apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: txt, isClearMemo: false }).then((latestData) => { showToast('メモを保存しました', false); renderMarkers(latestData); }).catch(handleServerError);
+        showBusy('更新中…');
+        apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: txt, isClearMemo: false })
+            .then((latestData) => { showToast('メモを保存しました', false); renderMarkers(latestData); })
+            .catch(handleServerError).finally(hideBusy);
     }
 
     function clearMemo(rowNumber) {
         if (confirm("メモをクリアしますか？\n「OK」でクリア、「キャンセル」で戻る")) {
-            apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: null, isClearMemo: true }).then(renderMarkers).catch(handleServerError);
+            showBusy('更新中…');
+            apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: null, isClearMemo: true })
+                .then(renderMarkers).catch(handleServerError).finally(hideBusy);
         }
     }
 
