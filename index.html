@@ -125,13 +125,11 @@
         body.large-ui .history-box { font-size: 15px !important; }
 
         /* ── 吹き出しの簡易表示（既定）／詳細表示の切替 ──
-              既定（.detail なし）＝簡易：補助ボタン(.detail-only)・空メモ(.memo-empty)・横スクロールを隠す。
-              最下部の「詳細を表示」ボタンで .detail を付けると現行のフル表示に戻る（再押下で簡易）。 */
+              既定（.detail なし）＝簡易：補助ボタン(.detail-only)・空メモ(.memo-empty)を隠す。
+              最下部の「詳細を表示」ボタンで .detail を付けると現行のフル表示に戻る（再押下で簡易）。
+              ※集合住宅グリッドのセル横スクロール(.grid-scroll の overflow-x:auto)は簡易表示でも従来どおり維持する。 */
         .popup-content:not(.detail) .detail-only { display: none !important; }
         .popup-content:not(.detail) .memo-empty { display: none !important; }
-        .popup-content:not(.detail) .grid-scroll { overflow-x: hidden !important; }
-        .popup-content:not(.detail) .grid-scroll table.grid-table { width: 100% !important; }
-        .popup-content:not(.detail) .grid-scroll table.grid-table td { min-width: 0 !important; }
         .detail-toggle { width: 100%; margin-top: 8px; padding: 7px; background: #4A78B0; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
         body.large-ui .detail-toggle { font-size: 17px !important; padding: 12px !important; }
 
