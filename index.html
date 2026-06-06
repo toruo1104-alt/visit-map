@@ -35,6 +35,8 @@
         .area-opt-num { min-width: 0; width: 46px; padding: 9px 0; text-align: center; }
         /* 移動後の地域名ラベル（画面上部・常時表示・タップで枠/表示を消去） */
         #area-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(44,62,80,0.92); color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); max-width: 92%; text-align: center; cursor: pointer; }
+        /* 枠内ピンに住所を一括割当するボタン（地域名ラベルの直下・中央） */
+        #assign-btn { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); z-index: 9999; background: #e03131; color: #fff; font-weight: bold; font-size: 13px; border: none; padding: 8px 14px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); cursor: pointer; white-space: nowrap; }
 
         /* ポップアップ共通 */
         /* touch-action: 吹き出し上のピンチで画面全体がズームしてしまうのを防ぐ（スクロールは可） */
@@ -151,6 +153,8 @@
 
 <!-- 移動後に表示する地域名ラベル（常時表示・タップで枠/表示を消去） -->
 <div id="area-label" style="display:none;" onclick="askClearAreaSelection()"></div>
+<!-- 赤枠表示中だけ出る：枠内ピンに住所を一括割当 -->
+<button id="assign-btn" style="display:none;" onclick="assignAddressToPinsInBox()">📌 枠内ピンに住所を割当</button>
 
 <!-- 住所で移動（地区→丁目→番地）。枠外タップで閉じる -->
 <div id="area-modal" onclick="if(event.target===this)closeAreaNav()">
@@ -201,7 +205,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxv_7bFE7yXPL7SAUu0oYKajjy0aONt1zAzDOLpUnHCeUpBSL3GtcGjq9Pr5NYrY30/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzTgcvkrGL0ZvvwM9Bd-J3SU7BagYcHQm4EP11PZvOPsa8PfMNI46qfYq4qdHY-FIIJ/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -645,7 +649,7 @@
     // 移動 → 街区を赤線で囲む（無ければ枠で代用）→ 地域名を表示
     function arriveAt(center, zoom, outline, label) {
         map.flyTo({ center: center, zoom: zoom, duration: 1200 });
-        if (outline) showBlockOrBox(center); else clearBanchiBox();
+        if (outline) showBlockOrBox(center, label); else clearBanchiBox();
         if (label) showAreaLabel(label);
     }
 
@@ -779,9 +783,17 @@
             [lng + dLng, lat + dLat], [lng - dLng, lat + dLat], [lng - dLng, lat - dLat]
         ]] } };
     }
-    function showBlockOrBox(center) {
+    // 現在表示中の赤枠（街区ポリゴン）と、その住所ラベル。枠内ピン一括割当で使う。
+    let currentBoxFeature = null;
+    let currentBoxAddr = null;
+    function showBlockOrBox(center, addr) {
         const f = findBlock(center[0], center[1]) || boxFeature(center);
+        currentBoxFeature = f;
+        currentBoxAddr = addr || null;
         drawBanchiFeature(f);
+        // 枠内ピンへ一括割当できるボタンを表示
+        const btn = document.getElementById('assign-btn');
+        if (btn) btn.style.display = currentBoxAddr ? 'block' : 'none';
     }
     function drawBanchiFeature(feature) {
         const draw = () => {
@@ -800,6 +812,28 @@
         if (map.getSource('banchi-box')) {
             map.getSource('banchi-box').setData({ type: 'FeatureCollection', features: [] });
         }
+        currentBoxFeature = null;
+        currentBoxAddr = null;
+        const btn = document.getElementById('assign-btn');
+        if (btn) btn.style.display = 'none';
+    }
+    // 赤枠の中にあるピンに、検索した住所（丁目・番）を一括で割り当てる
+    function assignAddressToPinsInBox() {
+        if (!currentBoxFeature || !currentBoxAddr) return;
+        const ring = currentBoxFeature.geometry && currentBoxFeature.geometry.coordinates
+            && currentBoxFeature.geometry.coordinates[0];
+        if (!ring) return;
+        const ids = currentData.filter(d => {
+            const lng = parseFloat(d.経度), lat = parseFloat(d.緯度);
+            return !isNaN(lng) && !isNaN(lat) && pointInRing(lng, lat, ring);
+        }).map(d => d.rowNumber);
+        if (!ids.length) { showToast('枠内にピンはありません', true); return; }
+        if (!confirm('枠内の ' + ids.length + ' 件のピンに「' + currentBoxAddr + '」を割り当てます。よろしいですか？')) return;
+        showBusy('割当中…');
+        const addr = currentBoxAddr, n = ids.length;
+        apiCall('updateAddressBatch', { rowNumbers: ids, address: addr })
+            .then((latest) => { renderMarkers(latest); showToast(n + '件に「' + addr + '」を割り当てました', false); })
+            .catch(handleServerError).finally(hideBusy);
     }
     // 画面上部に選択した地域名（番地まで）を常時表示する（タップで消去できる）
     function showAreaLabel(text) {
