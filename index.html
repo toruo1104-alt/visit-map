@@ -383,19 +383,19 @@
         positionOptions: { enableHighAccuracy: true },
         trackUserLocation: true,
         showUserHeading: true,
-        showAccuracyCircle: false,      // 周囲の薄い青（精度円）は表示しない
-        fitBoundsOptions: { maxZoom: 21 }
+        showAccuracyCircle: false,             // 周囲の薄い青（精度円）は表示しない
+        fitBoundsOptions: { maxZoom: 21, duration: 1200 }
     });
     map.addControl(geolocateControl, 'top-right');
-    // 現在地ボタンを押したら、GPS精度に関わらずしっかり寄せる（住所検索の移動と同程度の縮尺）
+    // 現在地ボタンを押したら、住所検索と同じ動き（flyTo・1.2秒）で現在地へズームする
     let geoForceZoom = false;
     geolocateControl.on('trackuserlocationstart', () => { geoForceZoom = true; });
     geolocateControl.on('geolocate', (pos) => {
-        if (!geoForceZoom) return;            // ボタン押下時の最初の1回だけ強制ズーム
+        if (!geoForceZoom) return;            // ボタン押下時の最初の1回だけ
         geoForceZoom = false;
         const c = [pos.coords.longitude, pos.coords.latitude];
-        // 制御側の自動カメラ移動の後に上書きしたいので少し遅延させてズームする
-        setTimeout(() => map.flyTo({ center: c, zoom: 21, duration: 700 }), 60);
+        // 制御側の自動カメラ移動の後に上書きしたいので少し遅延させて、住所検索と同じ flyTo を使う
+        setTimeout(() => map.flyTo({ center: c, zoom: 21, duration: 1200 }), 60);
     });
 
     let currentMarkers = [];
@@ -581,7 +581,11 @@
     function closeAreaNav() {
         document.getElementById('area-modal').style.display = 'none';
         areaPickCallback = null;
-        suppressMapTapUntil = Date.now() + 700; // 閉じた直後の地図タップ（戸建て登録など）を抑止
+        // 閉じた直後の地図への貫通タップ（戸建て/集合住宅の誤登録）を抑止。
+        // 保留中の登録タイマーも念のためクリアする。
+        clearTimeout(singleTapTimer);
+        clearTimeout(window.longPressTimer);
+        suppressMapTapUntil = Date.now() + 1200;
     }
     function renderAreaStep(step) {
         const title = document.getElementById('area-modal-title');
@@ -1056,6 +1060,7 @@
         // 長押しで集合住宅登録
         window.longPressTimer = setTimeout(() => {
             if (tapSuppressed) return;
+            if (Date.now() < suppressMapTapUntil) return; // 住所モーダルを閉じた直後は登録しない
             if (closeOpenForms()) return;
             handleMapClickOrTap(map.unproject([e.point.x, e.point.y]), '集合住宅');
         }, 800);
