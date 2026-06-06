@@ -53,7 +53,7 @@
 
         /* グリッド（表）スタイル */
         .grid-table { width: 100%; border-collapse: collapse; margin-top: 6px; text-align: center; font-size: 11px; }
-        .grid-table th, .grid-table td { border: 1px solid #ccc; padding: 4px 2px; }
+        .grid-table th, .grid-table td { border: 1px solid #ccc; padding: 6px 5px; }
         .grid-table th { background: #f4f4f4; }
         /* 階ラベル（左端）: 狭く・濃色・反転 */
         .grid-floor { background: #2c3e50; color: #fff; font-weight: bold; width: 22px; min-width: 22px; padding: 2px 0; font-size: 10px; position: sticky; left: 0; }
@@ -68,13 +68,14 @@
         .memo-section { margin-top: 8px; border-top: 1px solid #ddd; padding-top: 6px; }
 
         /* マーカー（ピン）の見た目（サイズはJSのapplyZoomScaleで動的調整） */
-        .custom-marker { display: flex; justify-content: center; align-items: center; font-weight: bold; border-radius: 50%; cursor: pointer; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
-        .marker-kodedate { width: 24px; height: 24px; font-size: 13px; border: 2px solid #333; }
+        /* 屋外・年配者向けの視認性強化：太字・濃い影・文字の縁取りでくっきり見せる */
+        .custom-marker { display: flex; justify-content: center; align-items: center; font-weight: 900; border-radius: 50%; cursor: pointer; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.55); text-shadow: 0 1px 1.5px rgba(0,0,0,0.45); }
+        .marker-kodedate { width: 24px; height: 24px; font-size: 13px; border: 2.5px solid #222; }
         .marker-shuga { width: 28px; height: 28px; font-size: 16px; background: #6FAEC0; border: 2px solid white; border-radius: 6px; }
         /* 戸建ての「訪問拒否(拒)」「外国語(外)」は外枠を☆形にする（塗り＝属性色／白文字） */
         .marker-star { border: none !important; border-radius: 0 !important; box-shadow: none !important; background: transparent;
             clip-path: polygon(50% 2%, 61% 35%, 96% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 4% 35%, 39% 35%);
-            filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.4)); }
+            filter: drop-shadow(0 1px 2.5px rgba(0,0,0,0.55)); }
 
         /* ── 文字サイズボタン（右下） ── */
         #scale-btn { position: absolute; bottom: 10px; right: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
@@ -158,7 +159,7 @@
     <div id="login-note">サインインできない場合は、管理者にこのアプリのスプレッドシートへの共有を依頼してください。</div>
 </div>
 
-<button id="scale-btn"  onclick="toggleScale()"  style="display:none;">文字：標準</button>
+<button id="scale-btn"  onclick="toggleScale()"  style="display:none;">アイコン：標準</button>
 <button id="signout-btn" onclick="signOut()"   style="display:none;">サインアウト</button>
 <button id="legend-btn"  onclick="toggleLegend()" style="display:none;">凡例</button>
 <button id="area-nav-btn" onclick="openAreaNav()" style="display:none;">🔍住所</button>
@@ -307,23 +308,24 @@
     });
 
     function initScale() {
-        const s = localStorage.getItem('uiScale');
-        // 旧「特大(xlarge)」設定は「大」に統合
-        if (s === 'large' || s === 'xlarge') document.body.classList.add('large-ui');
+        // 文字は「大」基準に統一（標準モードは廃止）。常に large-ui を適用する。
+        document.body.classList.add('large-ui');
+        // 右下ボタンで切り替える「アイコンの大きさ」だけを記憶から復元する。
+        if (localStorage.getItem('iconScale') === 'large') document.body.classList.add('icon-large');
     }
 
-    // 現在のモードに応じてボタン表示を更新
+    // 現在のアイコンサイズに応じてボタン表示を更新
     function updateScaleBtnText() {
-        const t = document.body.classList.contains('large-ui') ? '文字：大' : '文字：標準';
+        const t = document.body.classList.contains('icon-large') ? 'アイコン：大' : 'アイコン：標準';
         document.getElementById('scale-btn').textContent = t;
     }
 
-    // タップで 標準 ⇔ 大 を切替
+    // 右下ボタン：アイコン（マーカー）の大きさを 標準 ⇔ 大 で切替（文字サイズは変えない）
     function toggleScale() {
-        const isLarge = document.body.classList.toggle('large-ui');
-        localStorage.setItem('uiScale', isLarge ? 'large' : 'normal');
+        const iconLarge = document.body.classList.toggle('icon-large');
+        localStorage.setItem('iconScale', iconLarge ? 'large' : 'normal');
         updateScaleBtnText();
-        applyZoomScale(); // マーカーサイズもモードに合わせて更新
+        applyZoomScale(); // マーカーサイズを切替に合わせて更新
     }
 
     // サインイン成功時：IDトークンを保持・保存し、地図データを読み込む
@@ -538,17 +540,17 @@
         // 19+=130%, 18=115%, 17=100%, 16=85%, 15=70%, 14=55%, 13=45%, 12=35%, それ以下=27.5%（最小）
         const scale = zoom >= 19 ? 1.30 : zoom >= 18 ? 1.15 : zoom >= 17 ? 1.0 : zoom >= 16 ? 0.85
             : zoom >= 15 ? 0.70 : zoom >= 14 ? 0.55 : zoom >= 13 ? 0.45 : zoom >= 12 ? 0.35 : 0.275;
-        // 「大」モードのマーカーは旧「特大」サイズを採用
-        const isLarge = document.body.classList.contains('large-ui');
+        // アイコンサイズ（右下ボタンの icon-large）で基準サイズを切替。文字サイズとは独立。
+        const iconLarge = document.body.classList.contains('icon-large');
         currentMarkers.forEach(m => {
             const el = m.getElement();
             if (el.classList.contains('marker-kodedate')) {
-                const base = isLarge ? { w: 42, f: 24 } : { w: 24, f: 13 };
+                const base = iconLarge ? { w: 42, f: 24 } : { w: 24, f: 13 };
                 const star = el.classList.contains('marker-star');
                 el.style.width = el.style.height = Math.round(base.w * scale * (star ? 1.45 : 1)) + 'px';
                 el.style.fontSize = Math.round(base.f * scale * (star ? 1.05 : 1)) + 'px';
             } else if (el.classList.contains('marker-shuga')) {
-                const base = isLarge ? { w: 46, f: 26 } : { w: 28, f: 16 };
+                const base = iconLarge ? { w: 46, f: 26 } : { w: 28, f: 16 };
                 el.style.width = el.style.height = Math.round(base.w * scale) + 'px';
                 el.style.fontSize = Math.round(base.f * scale) + 'px';
             }
@@ -1270,7 +1272,7 @@
                 const roomNum = f * 100 + r;
                 const active = gridActiveRooms.includes(roomNum);
                 const label = hideNum ? '' : String(f * 100 + r);
-                html += `<td id="setup-rm-${roomNum}" onclick="toggleSetupRoom(${roomNum})" style="min-width:30px; background:${active ? '#5FA97D' : '#fff'}; color:${active ? '#fff' : '#333'}; cursor:pointer;">${label}</td>`;
+                html += `<td id="setup-rm-${roomNum}" onclick="toggleSetupRoom(${roomNum})" style="min-width:40px; background:${active ? '#5FA97D' : '#fff'}; color:${active ? '#fff' : '#333'}; cursor:pointer;">${label}</td>`;
             }
             html += `</tr>`;
         }
@@ -1563,7 +1565,7 @@
                     const st = roomStatusMap[roomNum];
                     const v = roomVisual(st);
                     const label = (st === '訪問拒否' || st === '外国語') ? '☆' : (hideNum ? '' : roomNum);
-                    gridHtml += `<td class="cell-active" data-room="${roomNum}" style="min-width:32px; background:${v.bg}; color:${v.color};" onclick="showRoomAction(${first.rowNumber}, ${roomNum}, this)">${label}</td>`;
+                    gridHtml += `<td class="cell-active" data-room="${roomNum}" style="min-width:40px; background:${v.bg}; color:${v.color};" onclick="showRoomAction(${first.rowNumber}, ${roomNum}, this)">${label}</td>`;
                 } else {
                     gridHtml += `<td class="cell-inactive"></td>`;
                 }
