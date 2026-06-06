@@ -649,20 +649,24 @@
         if (label) showAreaLabel(label);
     }
 
-    /* ── 住所の指定（住所検索ピッカーで選んだ住所を、ピンの「住所」として保存・表示） ── */
-    // 住所表示用テキスト：手動指定(E列)があれば優先、無ければ座標から逆算した最寄り番地
-    function addrDisplay(item) {
-        const a = item && item.住所;
-        if (a && a !== '-' && String(a).trim() !== '') return a; // 手動で指定済み
-        const d = deriveAddress(parseFloat(item.経度), parseFloat(item.緯度)); // 逆算
-        return d ? d : (addrPoints ? '（住所不明）' : '取得中…');
-    }
-    // 詳細ポップアップに入れる「住所」行（逆算表示＋手動指定ボタン）
+    /* ── 住所の表示（街区内包方式で番地を判定）。手動指定(E列)があればそれを優先 ── */
+    // 詳細ポップアップに入れる「住所」行。未指定の住所は吹き出し表示時に fillDerivedAddress で算出して埋める。
     function addrRowHtml(item) {
+        const stored = (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? item.住所 : '';
+        const lng = parseFloat(item.経度), lat = parseFloat(item.緯度);
+        const shown = stored || '判定中…';
         return `<div style="font-size:11px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
-            + `🏠 <span id="addr-text-${item.rowNumber}">${addrDisplay(item)}</span>`
+            + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}">${shown}</span>`
             + `<button class="save-btn" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressFor(${item.rowNumber})">住所を指定</button>`
             + `</div>`;
+    }
+    // 吹き出し内の未指定住所(.derived-addr[data-stored=0])を、街区内包方式で算出して表示に反映
+    function fillDerivedAddress(rootEl) {
+        if (!rootEl || !rootEl.querySelectorAll) return;
+        rootEl.querySelectorAll('.derived-addr[data-stored="0"]').forEach(el => {
+            const a = deriveAddress(parseFloat(el.dataset.lng), parseFloat(el.dataset.lat));
+            el.textContent = a ? a : (addrPoints ? '（住所判定不可）' : '判定中…');
+        });
     }
     // 既存ピンの住所を指定（ピッカーを開く→選択で保存）
     function pickAddressFor(rowNumber) {
@@ -729,8 +733,8 @@
         fetch('address_points.json').then(r => r.json())
             .then(d => {
                 addrPoints = Array.isArray(d) ? d : [];
-                // 読み込み前に描画済みなら、住所反映のため軽く再描画（ポップアップ未オープン時のみ）
-                if (currentData && currentData.length && !document.querySelector('.mapboxgl-popup')) renderMarkers(currentData);
+                // 読み込み前に開いていた吹き出しがあれば住所を反映する
+                document.querySelectorAll('.mapboxgl-popup').forEach(p => fillDerivedAddress(p));
             })
             .catch(() => { addrPoints = []; });
     }
@@ -740,17 +744,32 @@
         const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toR) * Math.cos(lat2 * toR) * Math.sin(dLng / 2) ** 2;
         return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
     }
-    // 座標→最寄りの番地住所（400m超なら範囲外として null）
+    // 座標→住所（番地）。ピンを内包する街区(赤枠)を特定し、その街区内に代表点がある番地を採用する。
+    //  ・街区内に番地点が複数（OSMで結合された場合）→ ピンに最も近いものを採用
+    //  ・街区が特定できない/街区内に番地点が無い場合 → 最寄り番地(400m以内)にフォールバック
     function deriveAddress(lng, lat) {
         if (!addrPoints || !addrPoints.length || isNaN(lng) || isNaN(lat)) return null;
-        let best = null, bd = Infinity;
+        const block = findBlock(lng, lat); // ピンを内包する街区（赤枠と同じロジック）
+        if (block && block.geometry && block.geometry.coordinates) {
+            const ring = block.geometry.coordinates[0];
+            let best = null, bd = Infinity;
+            for (let i = 0; i < addrPoints.length; i++) {
+                const p = addrPoints[i];
+                if (!pointInRing(p.x, p.y, ring)) continue; // その街区の中にある番地点だけ
+                const dx = p.x - lng, dy = p.y - lat, d = dx * dx + dy * dy;
+                if (d < bd) { bd = d; best = p; }
+            }
+            if (best) return best.a;
+        }
+        // フォールバック：街区で特定できないときは最寄り番地（400m以内）
+        let nb = null, nd = Infinity;
         for (let i = 0; i < addrPoints.length; i++) {
             const p = addrPoints[i];
             const dx = p.x - lng, dy = p.y - lat, d = dx * dx + dy * dy;
-            if (d < bd) { bd = d; best = p; }
+            if (d < nd) { nd = d; nb = p; }
         }
-        if (!best) return null;
-        return distM(lng, lat, best.x, best.y) <= 400 ? best.a : null;
+        if (nb && distM(lng, lat, nb.x, nb.y) <= 400) return nb.a;
+        return null;
     }
     function boxFeature(center) {
         const lng = center[0], lat = center[1], half = 35; // 約70m四方
@@ -1234,6 +1253,7 @@
             // 開くたびに操作欄を初期化（前回の部屋選択を持ち越さない＝確実に「部屋をタップして…」に）
             popup.on('open', () => {
                 if (isShuga) resetRoomActionPanel(popup);
+                fillDerivedAddress(popup.getElement()); // 住所（街区内包方式）を算出して表示
                 fitPopupInView(marker, isShuga ? 140 : 0);
             });
             // 吹き出しを閉じたら、選択中の部屋ハイライトを消し、操作欄を初期表示に戻す（選択状態を解除）
@@ -1467,6 +1487,7 @@
         const container = btn.closest('.popup-content');
         if (item && container) {
             container.innerHTML = createShugaViewHtml([item]);
+            fillDerivedAddress(container);
         } else {
             closeOpenForms();
         }
@@ -1563,6 +1584,7 @@
                 styleKodateMarker(marker.getElement(), item); // ピンの色・形を更新
                 applyZoomScale();                             // ☆⇔○でサイズが変わるため再調整
                 popup.setHTML('<div class="popup-content">' + createKodedateViewHtml(item) + '</div>');
+                fillDerivedAddress(popup.getElement());
             } else {
                 renderMarkers(latest); // フォールバック
             }
@@ -1593,6 +1615,7 @@
                 // ポップアップ自体のHTMLを更新（再オープンしても最新の色を保つ）
                 popup.setHTML('<div class="popup-content">' + createShugaViewHtml([item]) + '</div>');
                 const root = popup.getElement();
+                fillDerivedAddress(root);
                 const newCell = root ? root.querySelector(`[data-room="${roomNum}"]`) : null;
                 showRoomAction(buildingRow, roomNum, newCell); // 操作欄を開き直し履歴も更新
             } else {
@@ -1654,6 +1677,7 @@
         const popup = marker ? marker.getPopup() : null;
         if (item && popup) {
             popup.setHTML('<div class="popup-content">' + createShugaViewHtml([item]) + '</div>');
+            fillDerivedAddress(popup.getElement());
         } else {
             renderMarkers(latest);
         }
