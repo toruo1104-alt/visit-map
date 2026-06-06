@@ -401,7 +401,7 @@
         setTimeout(() => {
             if (!geoActive) return;
             if (first) map.flyTo({ center: c, zoom: 18, duration: 1200 });  // 初回：住所検索と同じ動き
-            else map.easeTo({ center: c, zoom: 18, duration: 250 });        // 追従：ズーム21を維持
+            else map.easeTo({ center: c, zoom: 18, duration: 250 });        // 追従：ズーム18を維持
         }, 70);
     });
 
@@ -911,16 +911,12 @@
     // 画面上部に選択した地域名（番地まで）を常時表示する（タップで消去できる）
     function showAreaLabel(text) {
         const el = document.getElementById('area-label');
-        // 住所部分を「長押し」で枠内ピンに一括割当 ／ 末尾の✕タップで枠と表示を消す
-        el.innerHTML = '<span id="area-label-text">📍 ' + text
-            + ' <span style="font-size:10px; opacity:0.85;">（長押しで割当）</span></span>'
-            + ' <span id="area-label-clear" style="margin-left:4px; padding:1px 7px; border-radius:10px; background:rgba(255,255,255,0.25);">✕</span>';
+        // 住所だけを表示。タップ＝枠消去の確認、長押し＝枠内ピンに一括割当
+        el.innerHTML = '<span id="area-label-text">' + text + '</span>';
         el.style.display = 'block';
-        // 住所＝長押しで割当（タップは無反応）、✕＝タップで消去
-        attachLongPress(document.getElementById('area-label-text'), () => {}, assignAddressToPinsInBox);
-        attachLongPress(document.getElementById('area-label-clear'), () => askClearAreaSelection(), () => {});
+        attachLongPress(document.getElementById('area-label-text'), () => askClearAreaSelection(), assignAddressToPinsInBox);
     }
-    // 末尾の✕タップ → 枠線と住所表示を消すか確認してクリア
+    // 住所表示をタップ → 枠線と住所表示を消すか確認してクリア
     function askClearAreaSelection() {
         if (confirm('枠線と住所表示を消しますか？')) {
             clearBanchiBox();
