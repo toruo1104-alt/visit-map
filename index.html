@@ -384,9 +384,11 @@
         });
     }
 
-    // ポータル等の外部リンク（?area=東小岩3丁目5番）で来たとき、その番地を自動表示するための値
-    const DEEP_LINK_AREA = new URLSearchParams(location.search).get('area');
-    let deepLinkDone = false;
+    // 外部リンク（URLパラメータ）：?area=東小岩3丁目5番 で番地表示、?pin=行番号 でその行のピンの吹き出しを開く
+    const _urlParams = new URLSearchParams(location.search);
+    const DEEP_LINK_AREA = _urlParams.get('area');
+    const DEEP_LINK_PIN = _urlParams.get('pin');
+    let deepLinkDone = false, deepLinkPinDone = false;
 
     const map = new mapboxgl.Map({
         container: 'map',
@@ -740,6 +742,24 @@
         } else {
             showToast('リンクの住所が見つかりませんでした', true);
         }
+    }
+    // 外部リンク(?pin=行番号)で指定された行のピンへ寄り、その吹き出しを開く（スプレッドシートの行リンク用）。
+    function openPinDeepLink(rowNumber) {
+        const item = currentData.find(d => d.rowNumber === rowNumber);
+        if (!item) { showToast('リンクのピンが見つかりませんでした', true); return; }
+        const lng = parseFloat(item.経度), lat = parseFloat(item.緯度);
+        if (isNaN(lng) || isNaN(lat)) { showToast('ピンの座標が不正です', true); return; }
+        const openIt = () => {
+            const marker = currentMarkers.find(m => m._rowNumber === rowNumber);
+            if (!marker) return; // 間引き表示で未描画なら、寄った後の再描画で再試行される
+            if (activeNewMarker) { activeNewMarker.remove(); activeNewMarker = null; }
+            currentMarkers.forEach(o => { const p = o.getPopup(); if (o !== marker && p && p.isOpen()) o.togglePopup(); });
+            const mp = marker.getPopup();
+            if (mp && !mp.isOpen()) marker.togglePopup(); // 既に開いていれば何もしない（冪等）
+        };
+        map.flyTo({ center: [lng, lat], zoom: 19, duration: 1200 }); // 戸建ては zoom17未満で隠れるため確実に見える寄りに
+        map.once('moveend', () => setTimeout(openIt, 80)); // 間引き再描画(既存moveend)の後にマーカーを開く
+        setTimeout(openIt, 1500);                          // moveendが発火しない場合のフォールバック
     }
     // 住所をジオコーディングして地点へ移動。日本の番地に強い国土地理院(GSI)を優先し、失敗時のみMapbox。
     // outline=true のとき、移動先の番地を含む街区を赤線で囲む。label を画面上部に約10秒表示。
@@ -1319,7 +1339,14 @@
 
     function loadDataFromSheet() {
         showBusy('読み込み中…');
-        apiCall('getData', {}).then(renderMarkers).catch(handleServerError).finally(hideBusy);
+        apiCall('getData', {}).then((data) => {
+            renderMarkers(data);
+            // スプレッドシートの行リンク(?pin=行番号)で来た場合は、そのピンの吹き出しを開く（初回のみ）
+            if (DEEP_LINK_PIN && !deepLinkPinDone) {
+                deepLinkPinDone = true;
+                openPinDeepLink(Number(DEEP_LINK_PIN));
+            }
+        }).catch(handleServerError).finally(hideBusy);
     }
 
     // サーバー側エラーを画面に出して原因を分かるようにする
