@@ -384,18 +384,25 @@
         trackUserLocation: true,
         showUserHeading: true,
         showAccuracyCircle: false,             // 周囲の薄い青（精度円）は表示しない
-        fitBoundsOptions: { maxZoom: 21, duration: 1200 }
+        fitBoundsOptions: { maxZoom: 21 }
     });
     map.addControl(geolocateControl, 'top-right');
-    // 現在地ボタンを押したら、住所検索と同じ動き（flyTo・1.2秒）で現在地へズームする
-    let geoForceZoom = false;
-    geolocateControl.on('trackuserlocationstart', () => { geoForceZoom = true; });
+    /* GeolocateControl は位置更新のたびに「GPS精度の円が収まるズーム」へ自動で再フィットする。
+       精度が粗いと大きく引いてしまい、こちらの zoom 21 を上書きするので、
+       追従中は毎回 21 に補正して固定する（初回は住所検索と同じ flyTo、以降は素早い easeTo）。 */
+    let geoActive = false, geoFirst = false;
+    geolocateControl.on('trackuserlocationstart', () => { geoActive = true; geoFirst = true; });
+    geolocateControl.on('trackuserlocationend', () => { geoActive = false; });
     geolocateControl.on('geolocate', (pos) => {
-        if (!geoForceZoom) return;            // ボタン押下時の最初の1回だけ
-        geoForceZoom = false;
+        if (!geoActive) return;               // 追従中（ACTIVE_LOCK）のときだけ補正する
         const c = [pos.coords.longitude, pos.coords.latitude];
-        // 制御側の自動カメラ移動の後に上書きしたいので少し遅延させて、住所検索と同じ flyTo を使う
-        setTimeout(() => map.flyTo({ center: c, zoom: 21, duration: 1200 }), 60);
+        const first = geoFirst; geoFirst = false;
+        // 制御側の自動カメラ移動の後に上書きしたいので少し遅延させる
+        setTimeout(() => {
+            if (!geoActive) return;
+            if (first) map.flyTo({ center: c, zoom: 21, duration: 1200 });  // 初回：住所検索と同じ動き
+            else map.easeTo({ center: c, zoom: 21, duration: 250 });        // 追従：ズーム21を維持
+        }, 70);
     });
 
     let currentMarkers = [];
