@@ -204,7 +204,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyH9JyM6ajMS4woMRGNYr61lFKrt7kiUk-w_5dpYL8svwhKcPYffAv2SjZDxhy77c0C/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzQyGC8ZzzC-dkotKowkLZMr1KW88rvsYZFPMpyb6DWnTjATUCynVlo5jAMnrzErkli/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -785,9 +785,8 @@
     function saveAddressFor(rowNumber, addr) {
         showBusy('更新中…');
         apiCall('updateAddress', { rowNumber: rowNumber, address: addr }).then((latest) => {
-            const item = (latest || []).find(d => d.rowNumber === rowNumber);
-            if (item && item.種別 === '集合住宅') refreshShugaPopup(rowNumber, latest);
-            else applyKodateChange(rowNumber)(latest);
+            applyInPlace(rowNumber, latest);
+            showToast('住所を保存しました', false);
         }).catch(handleServerError).finally(hideBusy);
     }
     // 新規登録フォームで指定中の住所（登録時に送信）
@@ -1296,7 +1295,8 @@
     }
 
     function loadDataFromSheet() {
-        apiCall('getData', {}).then(renderMarkers).catch(handleServerError);
+        showBusy('読み込み中…');
+        apiCall('getData', {}).then(renderMarkers).catch(handleServerError).finally(hideBusy);
     }
 
     // サーバー側エラーを画面に出して原因を分かるようにする
@@ -1670,7 +1670,7 @@
         if (item && item.履歴データ) {
             try {
                 const arr = JSON.parse(item.履歴データ);
-                const prefix = roomNum + '号室:';
+                const prefix = roomNum + '号室'; // 「○号室: 結果」も「○号室 属性：…」も拾えるよう号室までで一致
                 historyHtml = arr.filter(h => String(h.status).indexOf(prefix) === 0)
                     .map(h => `<div style="font-size:10px; border-bottom:1px dashed #eee;"><b>${h.status}</b> ${h.time}</div>`).join('');
             } catch(e){}
@@ -1722,6 +1722,14 @@
         return '不在(' + n + '回目)';
     }
 
+    // サーバー更新後の最新データを、ポップアップを閉じずにその場で反映する（種別を自動判別）。
+    // 集合住宅は refreshShugaPopup、戸建ては applyKodateChange に委譲して挙動を統一する。
+    function applyInPlace(rowNumber, latest) {
+        const item = (latest || []).find(d => d.rowNumber === rowNumber);
+        if (item && item.種別 === '集合住宅') refreshShugaPopup(rowNumber, latest);
+        else applyKodateChange(rowNumber)(latest);
+    }
+
     // 戸建ての更新を、ポップアップを閉じずにマーカーの色・吹き出し内容だけ最新化する。
     function applyKodateChange(rowNumber) {
         return (latest) => {
@@ -1749,7 +1757,8 @@
         }
         showBusy('更新中…');
         apiCall('updateLocation', { rowNumber: rowNumber, status: status, memoText: null, isClearMemo: false })
-            .then(applyKodateChange(rowNumber)).catch(handleServerError).finally(hideBusy);
+            .then((latest) => { applyKodateChange(rowNumber)(latest); showToast('訪問結果を記録しました', false); })
+            .catch(handleServerError).finally(hideBusy);
     }
 
     // 部屋の更新を、ポップアップを閉じずにグリッドの色・履歴だけ最新化する
@@ -1770,6 +1779,7 @@
             } else {
                 renderMarkers(latest); // フォールバック
             }
+            showToast('更新しました', false);
         }).catch(handleServerError).finally(hideBusy);
     }
 
@@ -1790,7 +1800,8 @@
         if(!attribute) return;
         showBusy('更新中…');
         apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: null, isClearMemo: false, addHistory: true, attribute: attribute })
-            .then(applyKodateChange(rowNumber)).catch(handleServerError).finally(hideBusy);
+            .then((latest) => { applyKodateChange(rowNumber)(latest); showToast('属性を更新しました', false); })
+            .catch(handleServerError).finally(hideBusy);
     }
 
     // 部屋の属性（訪問可/訪問拒否/外国語/空き家）の更新。操作ログも履歴に残す（addHistory=true）。
@@ -1812,7 +1823,7 @@
         const txt = document.getElementById(`memo-${rowNumber}`).value;
         showBusy('更新中…');
         apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: txt, isClearMemo: false })
-            .then((latestData) => { showToast('メモを保存しました', false); renderMarkers(latestData); })
+            .then((latest) => { applyInPlace(rowNumber, latest); showToast('メモを保存しました', false); })
             .catch(handleServerError).finally(hideBusy);
     }
 
@@ -1820,7 +1831,8 @@
         if (confirm("メモをクリアしますか？\n「OK」でクリア、「キャンセル」で戻る")) {
             showBusy('更新中…');
             apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: null, isClearMemo: true })
-                .then(renderMarkers).catch(handleServerError).finally(hideBusy);
+                .then((latest) => { applyInPlace(rowNumber, latest); showToast('メモを削除しました', false); })
+                .catch(handleServerError).finally(hideBusy);
         }
     }
 
@@ -1843,9 +1855,8 @@
         if (!confirm("この地点の履歴欄をすべてクリアします。\n元に戻せません。\n\n実行してよろしいですか？")) return;
         showBusy('更新中…');
         apiCall('clearHistory', { rowNumber: rowNumber }).then((latest) => {
+            applyInPlace(rowNumber, latest); // 種別は自動判別（戸建て/集合住宅で共通）
             showToast('履歴欄をクリアしました', false);
-            if (isShuga) refreshShugaPopup(rowNumber, latest);
-            else applyKodateChange(rowNumber)(latest);
         }).catch(handleServerError).finally(hideBusy);
     }
 </script>
