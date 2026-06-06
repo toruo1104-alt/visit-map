@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>map tool</title>
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
@@ -22,7 +22,6 @@
         #signout-btn { position: absolute; bottom: 10px; left: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
         #legend-btn  { position: absolute; bottom: 10px; left: 110px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
         #area-nav-btn { position: absolute; bottom: 10px; left: 164px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        #reload-map-btn { position: absolute; top: 10px; left: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
         /* 住所で移動モーダル */
         #area-modal { position: absolute; inset: 0; z-index: 10002; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; padding: 16px; }
@@ -38,6 +37,8 @@
         #area-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(44,62,80,0.92); color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); max-width: 92%; text-align: center; cursor: pointer; }
 
         /* ポップアップ共通 */
+        /* touch-action: 吹き出し上のピンチで画面全体がズームしてしまうのを防ぐ（スクロールは可） */
+        .mapboxgl-popup, .popup-content { touch-action: pan-x pan-y; }
         .popup-content { width: 290px; max-height: 60vh; overflow-y: auto; font-size: 13px; color: #333; }
         .building-title { font-weight: bold; font-size: 15px; border-bottom: 2px solid #333; padding-bottom: 4px; margin-bottom: 8px; }
         
@@ -107,31 +108,19 @@
             .history-box { font-size: 12px !important; }
         }
 
-        /* ── 手動「大」モード（マーカーサイズはJS管理のため指定なし） ── */
-        body.large-ui .popup-content { width: min(360px, 96vw) !important; font-size: 16px !important; }
-        body.large-ui .building-title { font-size: 18px !important; }
-        body.large-ui .grid-table { font-size: 14px !important; }
-        body.large-ui .grid-floor { font-size: 12px !important; }
-        body.large-ui .form-group label { font-size: 14px !important; }
-        body.large-ui .form-group input, body.large-ui .form-group select, body.large-ui .form-group textarea { font-size: 15px !important; padding: 7px !important; }
-        body.large-ui .inline-group label { font-size: 14px !important; }
-        body.large-ui .inline-group select { font-size: 15px !important; padding: 7px !important; }
-        body.large-ui .submit-btn { padding: 12px !important; font-size: 16px !important; }
-        body.large-ui .clear-btn, body.large-ui .save-btn { font-size: 13px !important; padding: 7px 12px !important; }
-        body.large-ui .history-box { font-size: 13px !important; }
-
-        /* ── 手動「特大」モード ── */
-        body.xlarge-ui .popup-content { width: min(400px, 98vw) !important; font-size: 18px !important; }
-        body.xlarge-ui .building-title { font-size: 21px !important; }
-        body.xlarge-ui .grid-table { font-size: 16px !important; }
-        body.xlarge-ui .grid-floor { font-size: 14px !important; }
-        body.xlarge-ui .form-group label { font-size: 16px !important; }
-        body.xlarge-ui .form-group input, body.xlarge-ui .form-group select, body.xlarge-ui .form-group textarea { font-size: 17px !important; padding: 9px !important; }
-        body.xlarge-ui .inline-group label { font-size: 16px !important; }
-        body.xlarge-ui .inline-group select { font-size: 17px !important; padding: 9px !important; }
-        body.xlarge-ui .submit-btn { padding: 14px !important; font-size: 18px !important; }
-        body.xlarge-ui .clear-btn, body.xlarge-ui .save-btn { font-size: 15px !important; padding: 9px 14px !important; }
-        body.xlarge-ui .history-box { font-size: 15px !important; }
+        /* ── 手動「大」モード（＝旧「特大」相当。マーカーサイズはJS管理） ── */
+        /* 吹き出しの最大幅は画面幅よりちょい狭いくらい(96vw) */
+        body.large-ui .popup-content { width: min(460px, 96vw) !important; font-size: 18px !important; }
+        body.large-ui .building-title { font-size: 21px !important; }
+        body.large-ui .grid-table { font-size: 16px !important; }
+        body.large-ui .grid-floor { font-size: 14px !important; }
+        body.large-ui .form-group label { font-size: 16px !important; }
+        body.large-ui .form-group input, body.large-ui .form-group select, body.large-ui .form-group textarea { font-size: 17px !important; padding: 9px !important; }
+        body.large-ui .inline-group label { font-size: 16px !important; }
+        body.large-ui .inline-group select { font-size: 17px !important; padding: 9px !important; }
+        body.large-ui .submit-btn { padding: 14px !important; font-size: 18px !important; }
+        body.large-ui .clear-btn, body.large-ui .save-btn { font-size: 15px !important; padding: 9px 14px !important; }
+        body.large-ui .history-box { font-size: 15px !important; }
 
         /* ── 表示の重なり順：吹き出し ＞ GPS青ポチ ＞ 訪問先ピン ── */
         .mapboxgl-popup { z-index: 50 !important; } /* 吹き出しは常に最前面 */
@@ -159,7 +148,6 @@
 <button id="signout-btn" onclick="signOut()"   style="display:none;">サインアウト</button>
 <button id="legend-btn"  onclick="toggleLegend()" style="display:none;">凡例</button>
 <button id="area-nav-btn" onclick="openAreaNav()" style="display:none;">🔍住所</button>
-<button id="reload-map-btn" onclick="manualReloadMap()" style="display:none;">🔄地図再読込</button>
 
 <!-- 移動後に表示する地域名ラベル（常時表示・タップで枠/表示を消去） -->
 <div id="area-label" style="display:none;" onclick="askClearAreaSelection()"></div>
@@ -213,7 +201,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyhkFaXtwaEwnWfm_saVPBEUTeRgb0RWnasunwJ-5xmIJK-Ws2vo2mAb3VzAlUtnbE/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbz2vBUn_VTfYFdru6_DFQY_6zXewSCaaJM9552l1hSAIdHCd3GKh4RBJXLKRecHmCll/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -265,7 +253,6 @@
         document.getElementById('signout-btn').style.display = '';
         document.getElementById('legend-btn').style.display = '';
         document.getElementById('area-nav-btn').style.display = '';
-        document.getElementById('reload-map-btn').style.display = '';
         document.getElementById('scale-btn').style.display = '';
         updateScaleBtnText();
         loadBlocks(); // 街区ポリゴン(blocks.geojson)を先読み
@@ -298,26 +285,20 @@
 
     function initScale() {
         const s = localStorage.getItem('uiScale');
-        if (s === 'large') document.body.classList.add('large-ui');
-        else if (s === 'xlarge') document.body.classList.add('xlarge-ui');
+        // 旧「特大(xlarge)」設定は「大」に統合
+        if (s === 'large' || s === 'xlarge') document.body.classList.add('large-ui');
     }
 
     // 現在のモードに応じてボタン表示を更新
     function updateScaleBtnText() {
-        const b = document.body;
-        const t = b.classList.contains('xlarge-ui') ? '文字：特大'
-                : b.classList.contains('large-ui') ? '文字：大' : '文字：標準';
+        const t = document.body.classList.contains('large-ui') ? '文字：大' : '文字：標準';
         document.getElementById('scale-btn').textContent = t;
     }
 
-    // タップで 標準 → 大 → 特大 → 標準 と循環
+    // タップで 標準 ⇔ 大 を切替
     function toggleScale() {
-        const b = document.body;
-        let next;
-        if (b.classList.contains('xlarge-ui')) { b.classList.remove('xlarge-ui'); next = 'normal'; }
-        else if (b.classList.contains('large-ui')) { b.classList.remove('large-ui'); b.classList.add('xlarge-ui'); next = 'xlarge'; }
-        else { b.classList.add('large-ui'); next = 'large'; }
-        localStorage.setItem('uiScale', next);
+        const isLarge = document.body.classList.toggle('large-ui');
+        localStorage.setItem('uiScale', isLarge ? 'large' : 'normal');
         updateScaleBtnText();
         applyZoomScale(); // マーカーサイズもモードに合わせて更新
     }
@@ -346,7 +327,6 @@
         document.getElementById('scale-btn').style.display = 'none';
         document.getElementById('legend-btn').style.display = 'none';
         document.getElementById('area-nav-btn').style.display = 'none';
-        document.getElementById('reload-map-btn').style.display = 'none';
         document.getElementById('legend-panel').classList.remove('show');
         closeAreaNav();
         clearBanchiBox();
@@ -496,17 +476,17 @@
         const zoom = map.getZoom();
         // 高ズーム(最大付近)ほど大きく：19以上=130%, 18=115%, 17=100%, 16=85%, 15=70%, それ以下=55%
         const scale = zoom >= 19 ? 1.30 : zoom >= 18 ? 1.15 : zoom >= 17 ? 1.0 : zoom >= 16 ? 0.85 : zoom >= 15 ? 0.70 : 0.55;
-        const tier = document.body.classList.contains('xlarge-ui') ? 'x'
-                   : document.body.classList.contains('large-ui') ? 'l' : 'n';
+        // 「大」モードのマーカーは旧「特大」サイズを採用
+        const isLarge = document.body.classList.contains('large-ui');
         currentMarkers.forEach(m => {
             const el = m.getElement();
             if (el.classList.contains('marker-kodedate')) {
-                const base = tier === 'x' ? { w: 42, f: 24 } : tier === 'l' ? { w: 34, f: 19 } : { w: 24, f: 13 };
+                const base = isLarge ? { w: 42, f: 24 } : { w: 24, f: 13 };
                 const star = el.classList.contains('marker-star');
                 el.style.width = el.style.height = Math.round(base.w * scale * (star ? 1.45 : 1)) + 'px';
                 el.style.fontSize = Math.round(base.f * scale * (star ? 1.05 : 1)) + 'px';
             } else if (el.classList.contains('marker-shuga')) {
-                const base = tier === 'x' ? { w: 46, f: 26 } : tier === 'l' ? { w: 38, f: 21 } : { w: 28, f: 16 };
+                const base = isLarge ? { w: 46, f: 26 } : { w: 28, f: 16 };
                 el.style.width = el.style.height = Math.round(base.w * scale) + 'px';
                 el.style.fontSize = Math.round(base.f * scale) + 'px';
             }
@@ -561,14 +541,18 @@
     };
     const AREA_PROXIMITY = '139.89036779018497,35.72063279470909'; // Mapboxフォールバック検索の優先中心
     let areaSel = { district: null, chome: null };
+    let areaPickCallback = null; // 住所指定モード：番地確定時にこの関数へ住所文字列を渡す（無ければ通常＝地図移動）
 
-    function openAreaNav() {
+    // onPick を渡すと「住所を選んで返す」モード、無指定だと「地図を移動」モード
+    function openAreaNav(onPick) {
+        areaPickCallback = (typeof onPick === 'function') ? onPick : null;
         areaSel = { district: null, chome: null };
         renderAreaStep('district');
         document.getElementById('area-modal').style.display = 'flex';
     }
     function closeAreaNav() {
         document.getElementById('area-modal').style.display = 'none';
+        areaPickCallback = null;
     }
     function renderAreaStep(step) {
         const title = document.getElementById('area-modal-title');
@@ -603,10 +587,12 @@
     function selectArea(kind, val) {
         if (kind === 'district') {
             areaSel.district = val;
-            if (AREA_DATA[val] === null) {            // 丁目を持たない地区（鹿骨町）→ そのまま移動（枠なし）
+            if (AREA_DATA[val] === null) {            // 丁目を持たない地区（鹿骨町）
                 areaSel.chome = null;
+                const cb = areaPickCallback;
                 closeAreaNav();
-                geocodeAndFly('東京都江戸川区' + val, 16, false, val);
+                if (cb) cb(val);                      // 住所指定モード：住所を返す
+                else geocodeAndFly('東京都江戸川区' + val, 16, false, val); // 通常：移動
             } else {
                 renderAreaStep('chome');
             }
@@ -614,11 +600,16 @@
             areaSel.chome = val;
             renderAreaStep('banchi');
         } else if (kind === 'banchi') {
-            // 例：「東京都江戸川区東小岩3-5」。GSIはこの丁目-番地表記を高精度に解決する。
-            const query = '東京都江戸川区' + areaSel.district + areaSel.chome + '-' + val;
             const label = areaSel.district + areaSel.chome + '丁目' + val + '番';
+            const cb = areaPickCallback;
             closeAreaNav();
-            geocodeAndFly(query, 18, true, label);
+            if (cb) {
+                cb(label); // 住所指定モード：選んだ住所を返す（地図は動かさない）
+            } else {
+                // 通常モード：その番地へ移動して街区を赤線で囲む
+                const query = '東京都江戸川区' + areaSel.district + areaSel.chome + '-' + val;
+                geocodeAndFly(query, 18, true, label);
+            }
         }
     }
     // 住所をジオコーディングして地点へ移動。日本の番地に強い国土地理院(GSI)を優先し、失敗時のみMapbox。
@@ -655,6 +646,48 @@
         map.flyTo({ center: center, zoom: zoom, duration: 1200 });
         if (outline) showBlockOrBox(center); else clearBanchiBox();
         if (label) showAreaLabel(label);
+    }
+
+    /* ── 住所の指定（住所検索ピッカーで選んだ住所を、ピンの「住所」として保存・表示） ── */
+    // 住所表示用テキスト（未設定なら案内）
+    function addrDisplay(item) {
+        const a = item && item.住所;
+        return (a && a !== '-' && String(a).trim() !== '') ? a : '（住所未指定）';
+    }
+    // 詳細ポップアップに入れる「住所」行（表示＋指定ボタン）
+    function addrRowHtml(item) {
+        return `<div style="font-size:11px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
+            + `🏠 <span id="addr-text-${item.rowNumber}">${addrDisplay(item)}</span>`
+            + `<button class="save-btn" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressFor(${item.rowNumber})">住所を指定</button>`
+            + `</div>`;
+    }
+    // 既存ピンの住所を指定（ピッカーを開く→選択で保存）
+    function pickAddressFor(rowNumber) {
+        openAreaNav(function (addr) { saveAddressFor(rowNumber, addr); });
+    }
+    function saveAddressFor(rowNumber, addr) {
+        showBusy('更新中…');
+        apiCall('updateAddress', { rowNumber: rowNumber, address: addr }).then((latest) => {
+            const item = (latest || []).find(d => d.rowNumber === rowNumber);
+            if (item && item.種別 === '集合住宅') refreshShugaPopup(rowNumber, latest);
+            else applyKodateChange(rowNumber)(latest);
+        }).catch(handleServerError).finally(hideBusy);
+    }
+    // 新規登録フォームで指定中の住所（登録時に送信）
+    let newPinAddress = '';
+    function pickAddressForNew() {
+        openAreaNav(function (addr) {
+            newPinAddress = addr;
+            const el = document.getElementById('new-addr-text');
+            if (el) el.textContent = addr;
+        });
+    }
+    // 新規登録フォームに入れる「住所」行
+    function newAddrRowHtml() {
+        return `<div style="font-size:11px; color:#555; margin:-2px 0 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
+            + `🏠 <span id="new-addr-text">${newPinAddress || '（住所未指定）'}</span>`
+            + `<button class="save-btn" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressForNew()">住所を指定</button>`
+            + `</div>`;
     }
 
     /* ── 街区(番)ポリゴン：OSMの道路から生成した blocks.geojson を読み込み、
@@ -876,26 +909,12 @@
         if (e.key === 'Escape') closeOpenForms();
     });
 
-    // 地図の描画を作り直す（背景化で消える対策）。軽い処理のみ＝負荷ほぼなし。
-    function reloadMap() {
-        try { map.resize(); map.triggerRepaint(); } catch (e) {}
-    }
-    // 左上ボタンからの手動再読込（フィードバック付き）
-    function manualReloadMap() {
-        reloadMap();
-        showToast('地図を再読込しました', false);
-    }
-    // 他アプリから戻った（再表示された）ときに自動で再描画する。
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') reloadMap();
-    });
-    // bfcache（戻る/アプリ復帰）からの復元時も再描画
-    window.addEventListener('pageshow', () => reloadMap());
 
     // 新規登録フォーム生成
     function handleMapClickOrTap(lngLat, forcedType) {
         if (activeNewMarker) activeNewMarker.remove();
         gridActiveRooms = [];
+        newPinAddress = ''; // 新規登録の住所指定をリセット
 
         // 座標を100%数値型としてパース
         const latVal = parseFloat(lngLat.lat);
@@ -905,6 +924,7 @@
         if (forcedType === '戸建て') {
             formHtml += `
                 <div class="building-title">📍 戸建てを新規登録</div>
+                ${newAddrRowHtml()}
                 <div class="inline-group">
                     <label>属性</label>
                     <select id="new-attribute-k" style="background:#d2d2d2;">
@@ -928,6 +948,7 @@
         } else {
             formHtml += `
                 <div class="building-title">🏢 集合住宅を新規登録</div>
+                ${newAddrRowHtml()}
                 <div class="form-group"><label>建物名</label><input type="text" id="new-name" placeholder="例：ハイツ小岩"></div>
                 <div class="form-row" style="display:flex; gap:4px;">
                     <div class="form-group" style="flex:1;"><label>階数</label>
@@ -1029,7 +1050,7 @@
             if (!name) { alert('建物名を入力してください'); return; }
         }
 
-        let data = { type: type, name: name, lat: parseFloat(lat), lng: parseFloat(lng), memo: document.getElementById('new-memo').value, attribute: '不明' };
+        let data = { type: type, name: name, lat: parseFloat(lat), lng: parseFloat(lng), memo: document.getElementById('new-memo').value, attribute: '不明', address: newPinAddress };
 
         if (type === '戸建て') {
             data.status = document.getElementById('new-status').value;
@@ -1212,6 +1233,7 @@
 
         return `
             <div class="building-title">${item['建物名 / 世帯名'] || '戸建て'}</div>
+            ${addrRowHtml(item)}
             <div class="inline-group">
                 <label>属性</label>
                 <select style="background:#d2d2d2;" onchange="saveAttribute(${item.rowNumber}, this.value)">
@@ -1281,6 +1303,7 @@
 
         return `
             <div class="building-title">${first['建物名 / 世帯名']}</div>
+            ${addrRowHtml(first)}
             <div style="font-size:11px; color:#666; margin-bottom:4px;">
                 管理人: ${first.管理人} ｜ 構成: ${first.属性} ｜ オートロック: ${getAutolock(first)}
             </div>
