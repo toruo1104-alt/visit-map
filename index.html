@@ -124,6 +124,17 @@
         body.large-ui .clear-btn, body.large-ui .save-btn { font-size: 15px !important; padding: 9px 14px !important; }
         body.large-ui .history-box { font-size: 15px !important; }
 
+        /* ── 吹き出しの簡易表示（既定）／詳細表示の切替 ──
+              既定（.detail なし）＝簡易：補助ボタン(.detail-only)・空メモ(.memo-empty)・横スクロールを隠す。
+              最下部の「詳細を表示」ボタンで .detail を付けると現行のフル表示に戻る（再押下で簡易）。 */
+        .popup-content:not(.detail) .detail-only { display: none !important; }
+        .popup-content:not(.detail) .memo-empty { display: none !important; }
+        .popup-content:not(.detail) .grid-scroll { overflow-x: hidden !important; }
+        .popup-content:not(.detail) .grid-scroll table.grid-table { width: 100% !important; }
+        .popup-content:not(.detail) .grid-scroll table.grid-table td { min-width: 0 !important; }
+        .detail-toggle { width: 100%; margin-top: 8px; padding: 7px; background: #4A78B0; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
+        body.large-ui .detail-toggle { font-size: 17px !important; padding: 12px !important; }
+
         /* ── 表示の重なり順：吹き出し(50) ＞ GPS青ポチ(5) ＞ 訪問先ピン(3) ──
               ピンには動的にz-indexが付くことがあるため !important で固定して青ポチを前面に保つ */
         .mapboxgl-popup { z-index: 50 !important; } /* 吹き出しは常に最前面 */
@@ -474,6 +485,18 @@
         map.easeTo({ center: marker.getLngLat(), offset: [0, oy], duration: 300 });
     }
 
+    // 吹き出しの「詳細を表示／隠す」を切り替える（簡易表示が既定）。
+    // 補助ボタン・空メモ・横スクロールの表示は CSS（.popup-content.detail）で一括制御する。
+    function togglePopupDetail(btn) {
+        const root = btn.closest('.popup-content');
+        if (!root) return;
+        const isDetail = root.classList.toggle('detail');
+        btn.textContent = isDetail ? '▲ 詳細を隠す' : '▼ 詳細を表示';
+        // 表示量が変わって高さが変化するので、吹き出しが画面に収まるよう寄せ直す
+        const m = currentMarkers.find(mk => { const p = mk.getPopup(); return p && p.isOpen(); }) || activeNewMarker;
+        if (m) setTimeout(() => fitPopupInView(m, 0), 30);
+    }
+
     // 部屋セルの見た目（状態に応じた色・文字）。未訪問は既定色のまま。落ち着いたトーンに調整。
     function roomVisual(status) {
         status = status || '';
@@ -767,7 +790,7 @@
         const shown = stored || '判定中…';
         return `<div style="font-size:11px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
             + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}">${shown}</span>`
-            + `<button class="save-btn" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressFor(${item.rowNumber})">住所を指定</button>`
+            + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressFor(${item.rowNumber})">住所を指定</button>`
             + `</div>`;
     }
     // 吹き出し内の未指定住所(.derived-addr[data-stored=0])を、街区内包方式で算出して表示に反映
@@ -802,7 +825,7 @@
     function newAddrRowHtml() {
         return `<div style="font-size:11px; color:#555; margin:-2px 0 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
             + `🏠 <span id="new-addr-text">${newPinAddress || '（住所未指定）'}</span>`
-            + `<button class="save-btn" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressForNew()">住所を指定</button>`
+            + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressForNew()">住所を指定</button>`
             + `</div>`;
     }
 
@@ -1155,8 +1178,9 @@
                         <option value="投函">投函</option>
                     </select>
                 </div>
-                <div class="form-group"><label>メモ</label><textarea id="new-memo" rows="2"></textarea></div>
+                <div class="form-group memo-empty"><label>メモ</label><textarea id="new-memo" rows="2"></textarea></div>
                 <button class="submit-btn" id="reg-btn" onclick="submitNewLocation(${latVal}, ${lngVal}, '戸建て')">登録</button>
+                <button class="detail-toggle" onclick="togglePopupDetail(this)">▼ 詳細を表示</button>
             `;
         } else {
             formHtml += `
@@ -1181,8 +1205,9 @@
                 <div class="form-group"><label>オートロック</label><select id="new-lock"><option value="なし">なし</option><option value="あり">あり</option></select></div>
                 <div class="form-group"><label>管理人</label><select id="new-manager"><option value="なし">なし</option><option value="あり">あり</option></select></div>
                 <div class="form-group"><label>構成属性</label><select id="new-attribute"><option value="不明">不明</option><option value="ファミリー">ファミリー</option><option value="シングル">シングル</option><option value="混在">混在</option></select></div>
-                <div class="form-group"><label>メモ</label><input type="text" id="new-memo"></div>
+                <div class="form-group memo-empty"><label>メモ</label><input type="text" id="new-memo"></div>
                 <button class="submit-btn" id="reg-btn" onclick="submitNewLocation(${latVal}, ${lngVal}, '集合住宅')">登録</button>
+                <button class="detail-toggle" onclick="togglePopupDetail(this)">▼ 詳細を表示</button>
             `;
         }
         formHtml += `</div>`;
@@ -1218,7 +1243,7 @@
     function renderRoomGrid() {
         const { floors, maxRoom } = getGridDims();
         const hideNum = isHideRoomNum();
-        let html = '<div style="overflow-x:auto;"><table class="grid-table" style="width:auto;"><tbody>';
+        let html = '<div class="grid-scroll" style="overflow-x:auto;"><table class="grid-table" style="width:auto;"><tbody>';
         for (let f = floors; f >= 1; f--) {
             html += `<tr><td class="grid-floor">${f}F</td>`;
             for (let r = 1; r <= maxRoom; r++) {
@@ -1445,6 +1470,7 @@
         const attr = item.属性;
         const sel = (v) => attr === v ? 'selected' : '';
         const normalSel = (attr === '訪問拒否' || attr === '外国語' || attr === '空き家') ? '' : 'selected';
+        const memoCls = (item.特記事項 && String(item.特記事項).trim()) ? '' : ' memo-empty'; // 空メモは簡易表示で隠す
 
         return `
             <div class="building-title">${item['建物名 / 世帯名'] || '戸建て'}</div>
@@ -1470,16 +1496,17 @@
             <div style="font-weight:bold; font-size:11px; margin-top:6px;">履歴欄</div>
             <div class="history-box">${historyHtml || '<div style="color:#aaa;">履歴なし</div>'}</div>
 
-            <div class="memo-section">
+            <div class="memo-section${memoCls}">
                 <label style="font-size:11px; font-weight:bold;">メモ</label>
                 <textarea id="memo-${item.rowNumber}" rows="2" style="width:100%; font-size:12px;" readonly onpointerdown="this.removeAttribute('readonly')">${item.特記事項 || ''}</textarea>
-                <div class="btn-row">
+                <div class="btn-row detail-only">
                     <button class="save-btn" onclick="saveMemo(${item.rowNumber})">メモ保存</button>
                     <button class="clear-btn" onclick="clearMemo(${item.rowNumber})">メモ削除</button>
                     <button class="clear-btn" style="background:#7f8c8d;" onclick="confirmClearHistory(${item.rowNumber}, false)">履歴欄のクリア</button>
                 </div>
             </div>
-            <button class="clear-btn" style="width:100%; margin-top:8px;" onclick="confirmDelete(${item.rowNumber})">🗑 このピンを削除</button>
+            <button class="clear-btn detail-only" style="width:100%; margin-top:8px;" onclick="confirmDelete(${item.rowNumber})">🗑 このピンを削除</button>
+            <button class="detail-toggle" onclick="togglePopupDetail(this)">▼ 詳細を表示</button>
         `;
     }
 
@@ -1494,9 +1521,11 @@
         let roomStatusMap = {};
         try { roomStatusMap = JSON.parse(first.部屋ステータス || '{}') || {}; } catch(e) { roomStatusMap = {}; }
         const hideNum = String(first.部屋番号非表示) === '1';
+        const memoText = cleanMemo(first);
+        const memoCls = memoText.trim() ? '' : ' memo-empty'; // 空メモは簡易表示で隠す
 
-        // 6部屋以上のときに横スクロールできるよう、テーブルを内容幅で配置
-        let gridHtml = '<div style="overflow-x:auto;"><table class="grid-table" style="width:auto;"><tbody>';
+        // 6部屋以上のときに横スクロールできるよう、テーブルを内容幅で配置（簡易表示では吹き出し幅に収める）
+        let gridHtml = '<div class="grid-scroll" style="overflow-x:auto;"><table class="grid-table" style="width:auto;"><tbody>';
         for (let f = floors; f >= 1; f--) {
             gridHtml += `<tr><td class="grid-floor">${f}F</td>`;
             for (let r = 1; r <= maxRoom; r++) {
@@ -1525,17 +1554,18 @@
             ${gridHtml}
             <div id="room-action-area" style="margin-top:8px; border:1px solid #6FAEC0; padding:6px; background:#f0f7f9;">${roomActionPlaceholder()}</div>
 
-            <div class="memo-section">
+            <div class="memo-section${memoCls}">
                 <label style="font-size:11px; font-weight:bold;">メモ</label>
-                <textarea id="memo-${first.rowNumber}" rows="1" style="width:100%; font-size:11px;" readonly onpointerdown="this.removeAttribute('readonly')">${cleanMemo(first)}</textarea>
-                <div class="btn-row">
+                <textarea id="memo-${first.rowNumber}" rows="1" style="width:100%; font-size:11px;" readonly onpointerdown="this.removeAttribute('readonly')">${memoText}</textarea>
+                <div class="btn-row detail-only">
                     <button class="save-btn" onclick="saveMemo(${first.rowNumber})">メモ保存</button>
                     <button class="clear-btn" onclick="clearMemo(${first.rowNumber})">メモ削除</button>
                     <button class="clear-btn" style="background:#7f8c8d;" onclick="confirmClearHistory(${first.rowNumber}, true)">履歴欄のクリア</button>
                 </div>
             </div>
-            <button class="save-btn" style="background:#34495e; width:100%; margin-top:8px;" onclick="confirmShugaEdit(${first.rowNumber}, this)">✏️ 建物情報を編集</button>
-            <button class="clear-btn" style="width:100%; margin-top:6px;" onclick="confirmDelete(${first.rowNumber})">🗑 このピンを削除</button>
+            <button class="save-btn detail-only" style="background:#34495e; width:100%; margin-top:8px;" onclick="confirmShugaEdit(${first.rowNumber}, this)">✏️ 建物情報を編集</button>
+            <button class="clear-btn detail-only" style="width:100%; margin-top:6px;" onclick="confirmDelete(${first.rowNumber})">🗑 このピンを削除</button>
+            <button class="detail-toggle" onclick="togglePopupDetail(this)">▼ 詳細を表示</button>
         `;
     }
 
