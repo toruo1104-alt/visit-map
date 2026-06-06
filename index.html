@@ -34,7 +34,7 @@
         .area-opt { background: #5E9DB8; color: #fff; border: none; border-radius: 6px; padding: 10px 14px; font-size: 14px; cursor: pointer; min-width: 72px; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
         .area-opt-num { min-width: 0; width: 46px; padding: 9px 0; text-align: center; }
         /* 移動後の地域名ラベル（画面上部・常時表示・タップで枠/表示を消去） */
-        #area-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(44,62,80,0.92); color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); max-width: 92%; text-align: center; cursor: pointer; }
+        #area-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(44,62,80,0.92); color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); max-width: 92%; text-align: center; cursor: pointer; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
 
         /* ポップアップ共通 */
         /* touch-action: 吹き出し上のピンチで画面全体がズームしてしまうのを防ぐ（スクロールは可） */
@@ -152,7 +152,7 @@
 <button id="area-nav-btn" onclick="openAreaNav()" style="display:none;">🔍住所</button>
 
 <!-- 移動後に表示する地域名ラベル（常時表示・タップで枠/表示を消去） -->
-<div id="area-label" style="display:none;" onclick="askClearAreaSelection()"></div>
+<div id="area-label" style="display:none;"></div>
 
 <!-- 住所で移動（地区→丁目→番地）。枠外タップで閉じる -->
 <div id="area-modal" onclick="if(event.target===this)closeAreaNav()">
@@ -209,12 +209,12 @@
 
     let ID_TOKEN = ''; // 「Googleで続ける」で取得した署名付きIDトークン(JWT)
 
-    /* ── セッション維持（30分以内は再認証不要・画面更新やアプリ復帰でも継続） ──
-       取得済みIDトークンを localStorage に保存し、30分以内かつ未失効なら
-       認証画面を出さずに自動復帰する。（簡易認証ゆえトークンを保存する設計） */
+    /* ── セッション維持（トークン有効期限まで再認証不要・画面更新やアプリ復帰でも継続） ──
+       取得済みIDトークンを localStorage に保存し、未失効の間は認証画面を出さずに自動復帰する。
+       GoogleのIDトークンは発行から約1時間有効。実質その間は再ログイン不要。（簡易認証ゆえ保存する設計） */
     const SESSION_TOKEN_KEY = 'vm_idtoken';
     const SESSION_TS_KEY = 'vm_idtoken_ts';
-    const SESSION_MAX_MS = 30 * 60 * 1000; // 30分
+    const SESSION_MAX_MS = 12 * 60 * 60 * 1000; // 保存の上限（実際はトークン失効=約1時間が先に効く）
 
     function saveSession(token) {
         try {
@@ -371,6 +371,7 @@
         style: 'mapbox://styles/mapbox/streets-v12',
         center: [139.89036779018497, 35.72063279470909], // 既定の中心位置
         zoom: 16,
+        maxZoom: 25, // 現在地ボタンで強く寄せられるよう上限を引き上げ（既定は22）
         bearingSnap: 18 // 北付近の小さな（意図しない）回転は指を離すと北に戻す＝誤回転を抑制
     });
 
@@ -378,13 +379,24 @@
     map.addControl(new mapboxgl.NavigationControl({ showZoom: false, showCompass: true, visualizePitch: true }), 'top-right');
 
     // 現在地（青ポチ表示＋押すと現在地へフォーカス）。コンパスの下に追加される。
-    map.addControl(new mapboxgl.GeolocateControl({
+    const geolocateControl = new mapboxgl.GeolocateControl({
         positionOptions: { enableHighAccuracy: true },
         trackUserLocation: true,
         showUserHeading: true,
-        showAccuracyCircle: false,        // 周囲の薄い青（精度円）は表示しない
-        fitBoundsOptions: { maxZoom: 18.7 } // 現在地へ寄った時のズーム（番地が画面の8割程度に）
-    }), 'top-right');
+        showAccuracyCircle: false,      // 周囲の薄い青（精度円）は表示しない
+        fitBoundsOptions: { maxZoom: 25 }
+    });
+    map.addControl(geolocateControl, 'top-right');
+    // 現在地ボタンを押したら、GPS精度に関わらずしっかり寄せる
+    let geoForceZoom = false;
+    geolocateControl.on('trackuserlocationstart', () => { geoForceZoom = true; });
+    geolocateControl.on('geolocate', (pos) => {
+        if (!geoForceZoom) return;            // ボタン押下時の最初の1回だけ強制ズーム
+        geoForceZoom = false;
+        const c = [pos.coords.longitude, pos.coords.latitude];
+        // 制御側の自動カメラ移動の後に上書きしたいので少し遅延させてズームする
+        setTimeout(() => map.flyTo({ center: c, zoom: 25, duration: 700 }), 60);
+    });
 
     let currentMarkers = [];
     let activeNewMarker = null;
@@ -886,10 +898,16 @@
     // 画面上部に選択した地域名（番地まで）を常時表示する（タップで消去できる）
     function showAreaLabel(text) {
         const el = document.getElementById('area-label');
-        el.textContent = '📍 ' + text;
+        // 住所部分を「長押し」で枠内ピンに一括割当 ／ 末尾の✕タップで枠と表示を消す
+        el.innerHTML = '<span id="area-label-text">📍 ' + text
+            + ' <span style="font-size:10px; opacity:0.85;">（長押しで割当）</span></span>'
+            + ' <span id="area-label-clear" style="margin-left:4px; padding:1px 7px; border-radius:10px; background:rgba(255,255,255,0.25);">✕</span>';
         el.style.display = 'block';
+        // 住所＝長押しで割当（タップは無反応）、✕＝タップで消去
+        attachLongPress(document.getElementById('area-label-text'), () => {}, assignAddressToPinsInBox);
+        attachLongPress(document.getElementById('area-label-clear'), () => askClearAreaSelection(), () => {});
     }
-    // ラベルをタップ → 枠線と住所表示を消すか確認してクリア
+    // 末尾の✕タップ → 枠線と住所表示を消すか確認してクリア
     function askClearAreaSelection() {
         if (confirm('枠線と住所表示を消しますか？')) {
             clearBanchiBox();
@@ -948,6 +966,12 @@
     }
 
     map.on('load', () => { /* データ取得はサインイン成功後（handleCredential）に行う */ });
+
+    // 他アプリ等から戻った時に地図が消えている対策：再表示時にサイズ再計算＋再描画（軽い処理）
+    function recoverMap() { try { map.resize(); map.triggerRepaint(); } catch (e) {} }
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') recoverMap(); });
+    window.addEventListener('pageshow', recoverMap);
+    window.addEventListener('focus', recoverMap);
 
     // 入力フォームや詳細ポップアップが開いていれば閉じる。閉じたものがあれば true を返す。
     function closeOpenForms() {
@@ -1253,7 +1277,7 @@
         if (!el) {
             el = document.createElement('div');
             el.id = 'app-toast';
-            el.style.cssText = 'position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:9999; padding:8px 14px; border-radius:6px; font-size:13px; box-shadow:0 2px 6px rgba(0,0,0,0.3); max-width:90%; text-align:center;';
+            el.style.cssText = 'position:absolute; top:60px; left:50%; transform:translateX(-50%); z-index:9999; padding:8px 14px; border-radius:6px; font-size:13px; box-shadow:0 2px 6px rgba(0,0,0,0.3); max-width:90%; text-align:center;';
             document.body.appendChild(el);
         }
         el.style.background = isError ? '#C75F56' : '#5FA97D';
