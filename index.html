@@ -201,7 +201,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbz2vBUn_VTfYFdru6_DFQY_6zXewSCaaJM9552l1hSAIdHCd3GKh4RBJXLKRecHmCll/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxv_7bFE7yXPL7SAUu0oYKajjy0aONt1zAzDOLpUnHCeUpBSL3GtcGjq9Pr5NYrY30/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -255,7 +255,8 @@
         document.getElementById('area-nav-btn').style.display = '';
         document.getElementById('scale-btn').style.display = '';
         updateScaleBtnText();
-        loadBlocks(); // 街区ポリゴン(blocks.geojson)を先読み
+        loadBlocks();      // 街区ポリゴン(blocks.geojson)を先読み
+        loadAddrPoints();  // 番地代表点(address_points.json)を先読み（住所の逆算用）
         loadDataFromSheet();
     }
 
@@ -649,12 +650,14 @@
     }
 
     /* ── 住所の指定（住所検索ピッカーで選んだ住所を、ピンの「住所」として保存・表示） ── */
-    // 住所表示用テキスト（未設定なら案内）
+    // 住所表示用テキスト：手動指定(E列)があれば優先、無ければ座標から逆算した最寄り番地
     function addrDisplay(item) {
         const a = item && item.住所;
-        return (a && a !== '-' && String(a).trim() !== '') ? a : '（住所未指定）';
+        if (a && a !== '-' && String(a).trim() !== '') return a; // 手動で指定済み
+        const d = deriveAddress(parseFloat(item.経度), parseFloat(item.緯度)); // 逆算
+        return d ? d : (addrPoints ? '（住所不明）' : '取得中…');
     }
-    // 詳細ポップアップに入れる「住所」行（表示＋指定ボタン）
+    // 詳細ポップアップに入れる「住所」行（逆算表示＋手動指定ボタン）
     function addrRowHtml(item) {
         return `<div style="font-size:11px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
             + `🏠 <span id="addr-text-${item.rowNumber}">${addrDisplay(item)}</span>`
@@ -716,6 +719,38 @@
             if (ring && pointInRing(lng, lat, ring)) return blocksData[k];
         }
         return null;
+    }
+
+    /* ── 住所の逆算取得：番地の代表点(address_points.json)を読み込み、
+          ピン座標に最も近い番地の住所を返す（赤枠＝街区の逆算に相当） ── */
+    let addrPoints = null; // [{a:'東小岩3丁目5番', x:lng, y:lat}, ...]
+    function loadAddrPoints() {
+        if (addrPoints) return;
+        fetch('address_points.json').then(r => r.json())
+            .then(d => {
+                addrPoints = Array.isArray(d) ? d : [];
+                // 読み込み前に描画済みなら、住所反映のため軽く再描画（ポップアップ未オープン時のみ）
+                if (currentData && currentData.length && !document.querySelector('.mapboxgl-popup')) renderMarkers(currentData);
+            })
+            .catch(() => { addrPoints = []; });
+    }
+    function distM(lng1, lat1, lng2, lat2) {
+        const R = 6371000, toR = Math.PI / 180;
+        const dLat = (lat2 - lat1) * toR, dLng = (lng2 - lng1) * toR;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toR) * Math.cos(lat2 * toR) * Math.sin(dLng / 2) ** 2;
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+    }
+    // 座標→最寄りの番地住所（400m超なら範囲外として null）
+    function deriveAddress(lng, lat) {
+        if (!addrPoints || !addrPoints.length || isNaN(lng) || isNaN(lat)) return null;
+        let best = null, bd = Infinity;
+        for (let i = 0; i < addrPoints.length; i++) {
+            const p = addrPoints[i];
+            const dx = p.x - lng, dy = p.y - lat, d = dx * dx + dy * dy;
+            if (d < bd) { bd = d; best = p; }
+        }
+        if (!best) return null;
+        return distM(lng, lat, best.x, best.y) <= 400 ? best.a : null;
     }
     function boxFeature(center) {
         const lng = center[0], lat = center[1], half = 35; // 約70m四方
@@ -909,16 +944,28 @@
         if (e.key === 'Escape') closeOpenForms();
     });
 
+    // 吹き出し上でのピンチ（2本指）による画面ズームを抑止する。
+    // ※ iOS Safari は viewport の user-scalable=no を無視するため、ジェスチャを直接 preventDefault する。
+    //    地図(canvas)上のピンチは対象外なので、地図のズームは従来どおり効く。
+    function isOnPopup(t) { return t && t.closest && t.closest('.mapboxgl-popup'); }
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => {
+        document.addEventListener(ev, (e) => { if (isOnPopup(e.target)) e.preventDefault(); }, { passive: false });
+    });
+    document.addEventListener('touchmove', (e) => {
+        if (e.touches && e.touches.length > 1 && isOnPopup(e.target)) e.preventDefault();
+    }, { passive: false });
+
 
     // 新規登録フォーム生成
     function handleMapClickOrTap(lngLat, forcedType) {
         if (activeNewMarker) activeNewMarker.remove();
         gridActiveRooms = [];
-        newPinAddress = ''; // 新規登録の住所指定をリセット
 
         // 座標を100%数値型としてパース
         const latVal = parseFloat(lngLat.lat);
         const lngVal = parseFloat(lngLat.lng);
+        // タップ地点から住所を逆算して初期値に（「住所を指定」で手動上書きも可）
+        newPinAddress = deriveAddress(lngVal, latVal) || '';
 
         let formHtml = `<div class="popup-content">`;
         if (forcedType === '戸建て') {
