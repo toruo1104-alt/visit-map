@@ -1522,7 +1522,7 @@
                     <option value="投函">投函</option>
                 </select>
             </div>
-            <div style="font-weight:bold; font-size:11px; margin-top:6px;">履歴欄</div>
+            <div style="font-weight:bold; font-size:14px; margin-top:6px;">履歴欄</div>
             <div class="history-box">${historyHtml || '<div style="color:#aaa;">履歴なし</div>'}</div>
 
             <div class="memo-section${memoCls}">
@@ -1731,7 +1731,7 @@
                 const arr = JSON.parse(item.履歴データ);
                 const prefix = roomNum + '号室'; // 「○号室: 結果」も「○号室 属性：…」も拾えるよう号室までで一致
                 historyHtml = arr.filter(h => String(h.status).indexOf(prefix) === 0)
-                    .map(h => `<div style="font-size:10px; border-bottom:1px dashed #eee; display:flex; justify-content:space-between; gap:8px;"><span>${h.time}</span><b>${h.status}</b></div>`).join('');
+                    .map(h => `<div style="border-bottom:1px dashed #eee; display:flex; justify-content:space-between; gap:8px;"><span>${h.time}</span><b>${h.status}</b></div>`).join('');
             } catch(e){}
         }
 
@@ -1766,8 +1766,8 @@
                     <option value="投函">投函</option>
                 </select>
             </div>
-            <div style="font-weight:bold; font-size:10px; margin-top:4px;">部屋の履歴:</div>
-            <div style="min-height:46px; max-height:60px; overflow-y:auto; background:white; padding:2px; border:1px solid #ccc;">${historyHtml || '<div style="font-size:10px; color:#aaa;">履歴なし</div>'}</div>
+            <div style="font-weight:bold; font-size:14px; margin-top:4px;">部屋の履歴:</div>
+            <div class="history-box" style="min-height:46px; max-height:60px; margin-top:2px;">${historyHtml || '<div style="color:#aaa;">履歴なし</div>'}</div>
         `;
         const area = document.getElementById('room-action-area');
         if (area) area.innerHTML = html;
