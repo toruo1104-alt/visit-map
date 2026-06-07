@@ -216,7 +216,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzQyGC8ZzzC-dkotKowkLZMr1KW88rvsYZFPMpyb6DWnTjATUCynVlo5jAMnrzErkli/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzesioVyiH9gbpCCCLogv4sjZsuGHqRK4ohe3WWZ1ovRJ1lEO3914xHTKLKDtJsbKo/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -1353,10 +1353,53 @@
         }).catch(handleServerError).finally(hideBusy);
     }
 
+    /* フロントで起きたエラーをバックエンドの ErrorLog へ「コッソリ」送る（遠隔で原因特定するため）。
+       ★この関数自体は絶対にアプリを壊さない・ループしない設計にしている：
+        - 通常の apiCall を使わず独自 fetch にする（apiCall失敗→handleServerError→ここ、の循環を断つ）
+        - fetch の失敗は握りつぶす（オフライン時も安全。報告失敗を再報告しない）
+        - 同一内容の連投と、1セッションの総数を制限してスパム・暴走を防ぐ */
+    let _errReportLast = '';
+    let _errReportCount = 0;
+    function sendErrorToServer(errorType, message, location) {
+        try {
+            const msg = String(message == null ? '' : message);
+            const sig = (errorType || '') + '|' + msg + '|' + (location || '');
+            if (sig === _errReportLast) return;      // 直前と同一内容は送らない
+            if (_errReportCount >= 30) return;       // 暴走防止の上限
+            _errReportLast = sig; _errReportCount++;
+            fetch(GAS_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    action: 'reportError',
+                    idToken: ID_TOKEN,
+                    message: msg.slice(0, 2000),
+                    location: String(location || '').slice(0, 500),
+                    userAgent: (navigator && navigator.userAgent) || ''
+                })
+            }).catch(function () { /* オフライン等。報告失敗は無視する（再報告しない） */ });
+        } catch (e) { /* 何があってもアプリ本体に影響させない */ }
+    }
+
+    // 予期せぬJS例外も自動でサーバーへ可視化（画面クラッシュを遠隔で特定するため）
+    window.addEventListener('error', function (ev) {
+        try {
+            const loc = (ev.filename || '') + ':' + (ev.lineno || '') + ':' + (ev.colno || '');
+            sendErrorToServer('JsError', ev.message || 'error', loc);
+        } catch (e) {}
+    });
+    window.addEventListener('unhandledrejection', function (ev) {
+        try {
+            const r = ev.reason;
+            sendErrorToServer('PromiseRejection', (r && r.message) ? r.message : String(r), 'unhandledrejection');
+        } catch (e) {}
+    });
+
     // サーバー側エラーを画面に出して原因を分かるようにする
     function handleServerError(err) {
         console.error('サーバーエラー:', err);
         const msg = (err && err.message) ? err.message : String(err);
+        sendErrorToServer('CommError', msg, 'handleServerError'); // 誰の端末で起きたかを ErrorLog に集約する
         // 認証エラー（トークン無効・期限切れ・権限なし）はログイン画面へ戻す。
         // サーバーの具体的な理由（権限なしなら対象メール入り）をそのまま表示し、原因を分かるようにする。
         // showLogin() は自動再サインインしないため、ここに来てもループにはならない。
