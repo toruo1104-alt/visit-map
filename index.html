@@ -59,7 +59,7 @@
         .form-group label { display: block; font-size: 11px; font-weight: bold; margin-bottom: 2px; }
         .form-group input, .form-group select, .form-group textarea { width: 100%; box-sizing: border-box; padding: 4px; font-size: 12px; }
         .btn-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-        .submit-btn { flex: 1; padding: 6px; background: #5E9DB8; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; }
+        .submit-btn { display: block; width: 100%; padding: 8px; background: #5E9DB8; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; }
         .clear-btn { background: #C75F56; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
         .save-btn { background: #5FA97D; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
 
@@ -100,8 +100,8 @@
 
         /* ── 属性・訪問結果の横並びレイアウト（ラベル左・セレクト右） ── */
         .inline-group { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-        .inline-group label { min-width: 58px; font-size: 11px; font-weight: bold; white-space: nowrap; flex-shrink: 0; margin: 0; }
-        .inline-group select { flex: 1; box-sizing: border-box; padding: 4px; font-size: 12px; }
+        .inline-group label { min-width: 72px; font-size: 11px; font-weight: bold; white-space: nowrap; flex-shrink: 0; margin: 0; }
+        .inline-group select { flex: 1; max-width: 200px; box-sizing: border-box; padding: 4px; font-size: 12px; }
 
         /* ── 処理中インジケーター（サーバー通信中に表示） ── */
         /* 更新中の操作ブロック用オーバーレイ（クリックを吸収して操作不可にする） */
@@ -887,7 +887,7 @@
         const stored = (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? item.住所 : '';
         const lng = parseFloat(item.経度), lat = parseFloat(item.緯度);
         const shown = stored || '判定中…';
-        return `<div style="font-size:11px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
+        return `<div style="font-size:14px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
             + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}">${shown}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressFor(${item.rowNumber})">住所を指定</button>`
             + `</div>`;
@@ -922,7 +922,7 @@
     }
     // 新規登録フォームに入れる「住所」行
     function newAddrRowHtml() {
-        return `<div style="font-size:11px; color:#555; margin:-2px 0 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
+        return `<div style="font-size:14px; color:#555; margin:-2px 0 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
             + `🏠 <span id="new-addr-text">${newPinAddress || '（住所未指定）'}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressForNew()">住所を指定</button>`
             + `</div>`;
@@ -1851,7 +1851,10 @@
                 const arr = JSON.parse(item.履歴データ);
                 const prefix = roomNum + '号室'; // 「○号室: 結果」も「○号室 属性：…」も拾えるよう号室までで一致
                 historyHtml = arr.filter(h => String(h.status).indexOf(prefix) === 0)
-                    .map(h => `<div style="border-bottom:1px dashed #eee; display:flex; justify-content:space-between; gap:8px;"><span>${h.time}</span><b>${h.status}</b></div>`).join('');
+                    .map(h => {
+                        const text = String(h.status).slice(prefix.length).replace(/^[:：\s]+/, ''); // 先頭の「○号室」を除去（欄上部に号室を表示済み）
+                        return `<div style="border-bottom:1px dashed #eee; display:flex; justify-content:space-between; gap:8px;"><span>${h.time}</span><b>${text}</b></div>`;
+                    }).join('');
             } catch(e){}
         }
 
