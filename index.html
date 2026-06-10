@@ -1316,10 +1316,10 @@
                 <div class="form-group"><label>建物名</label><input type="text" id="new-name" placeholder="例：ハイツ小岩" style="background:#FFF9DD;"></div>
                 <div class="form-row" style="display:flex; gap:4px;">
                     <div class="form-group" style="flex:1;"><label>階数</label>
-                        <select id="new-floors" onchange="generateSetupGrid()" style="background:#FFF9DD;">${[1,2,3,4,5,6,7,8,9,10].map(v=>`<option value="${v}">${v}階</option>`).join('')}</select>
+                        <select id="new-floors" onchange="generateSetupGrid()" style="background:#FFF9DD;">${[1,2,3,4,5,6,7,8,9,10].map(v=>`<option value="${v}" ${v===2?'selected':''}>${v}階</option>`).join('')}</select>
                     </div>
                     <div class="form-group" style="flex:1;"><label>最大部屋数</label>
-                        <select id="new-maxroom" onchange="generateSetupGrid()" style="background:#FFF9DD;">${Array.from({length:20},(_,i)=>i+1).map(v=>`<option value="${v}">${String(v).padStart(2,'0')}</option>`).join('')}</select>
+                        <select id="new-maxroom" onchange="generateSetupGrid()" style="background:#FFF9DD;">${Array.from({length:20},(_,i)=>i+1).map(v=>`<option value="${v}" ${v===3?'selected':''}>${String(v).padStart(2,'0')}</option>`).join('')}</select>
                     </div>
                 </div>
                 <div class="form-group" style="margin:2px 0;">
@@ -1349,7 +1349,35 @@
         activeNewMarker.togglePopup();
 
         // 集合住宅はグリッドを後から生成するため、生成後に高さが変わる→再度フィットさせる
-        if (forcedType === '集合住宅') { setTimeout(generateSetupGrid, 100); }
+        if (forcedType === '集合住宅') {
+            setTimeout(generateSetupGrid, 100);
+            prefillNearestBuildingName(lngVal, latVal); // 最寄りの建物・施設名を建物名の初期値に（試験的）
+        }
+    }
+
+    /* ── 建物名の自動入力（試験的）：タップ地点の最寄りPOI名を Mapbox Tilequery API で取得する ──
+       地図タイルのPOIデータ（mapbox-streets-v8）を座標で照会し、80m以内で最も近い「名前を持つ」
+       地物の名前（日本語優先）を建物名欄へ事前入力する。
+       ・取得できない／該当なしの場合は何もしない（従来どおり空欄で手入力）
+       ・利用者がすでに入力を始めていたら上書きしない
+       ・日本の住宅地ではPOI収録が疎らなため、アパート名は取れないことも多い（精度は実地確認） */
+    function prefillNearestBuildingName(lng, lat) {
+        const url = 'https://api.mapbox.com/v4/mapbox.mapbox-streets-v8/tilequery/'
+            + lng + ',' + lat + '.json?radius=80&limit=10&layers=poi_label&access_token='
+            + encodeURIComponent(mapboxgl.accessToken);
+        fetch(url).then(r => r.json()).then(d => {
+            const el = document.getElementById('new-name');
+            if (!el || el.value) return; // フォームが閉じた／入力済みなら何もしない
+            let best = null;
+            ((d && d.features) || []).forEach(f => {
+                const p = f.properties || {};
+                const name = p.name_ja || p.name;
+                if (!name) return;
+                const dist = (p.tilequery && typeof p.tilequery.distance === 'number') ? p.tilequery.distance : Infinity;
+                if (!best || dist < best.dist) best = { name: name, dist: dist };
+            });
+            if (best) el.value = best.name;
+        }).catch(() => { /* 取得失敗時は静かに従来どおり（手入力） */ });
     }
 
     // グリッドの現在の階数・最大部屋番号を取得
