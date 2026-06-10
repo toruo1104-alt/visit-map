@@ -44,7 +44,7 @@
         .area-map .dist:hover { fill: #9cc7da; }
         .area-map .dist:active { fill: #5E9DB8; }
         .area-map .lbl { fill: #102733; font-size: 38px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; pointer-events: none; user-select: none; }
-        .area-map .lbl.sm { font-size: 28px; }
+        .area-map .lbl.sm { font-size: 34px; }
         /* 移動後の地域名ラベル（画面上部・常時表示・タップで枠/表示を消去） */
         #area-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(44,62,80,0.92); color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); max-width: 92%; text-align: center; cursor: pointer; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
 
@@ -658,7 +658,7 @@
         <text class="lbl sm" data-name="鹿骨町" x="186" y="582">鹿骨町</text>
         <text class="lbl" data-name="西篠崎" x="482" y="650">西篠崎</text>
         <text class="lbl" data-name="鹿骨" x="300" y="757">鹿骨</text>
-        <text class="lbl" data-name="上篠崎" x="623" y="708">上篠崎</text>
+        <text class="lbl" data-name="上篠崎" x="661" y="708">上篠崎</text>
         <text class="lbl" data-name="篠崎町" x="674" y="893">篠崎町</text>
         <text class="lbl" data-name="新堀" x="262" y="949">新堀</text>
         <text class="lbl sm" data-name="春江町" x="366" y="993">春江町</text>
@@ -669,7 +669,7 @@
     let areaSel = { district: null, chome: null };
     let areaViewMode = localStorage.getItem('vm_areaView') || 'map'; // 'map'=地区図 / 'list'=一覧グリッド
     // 一覧グリッドの並び順（3列×4行で江戸川区の地図配置に近づけた）
-    const AREA_GRID_ORDER = ['南小岩','東小岩','北篠崎','東松本','西篠崎','上篠崎','鹿骨町','鹿骨','篠崎町','新堀','春江町','谷河内'];
+    const AREA_GRID_ORDER = ['東松本','南小岩','東小岩','鹿骨町','鹿骨','北篠崎','新堀','西篠崎','上篠崎','春江町','谷河内','篠崎町'];
     function toggleAreaView() {
         areaViewMode = (areaViewMode === 'map') ? 'list' : 'map';
         localStorage.setItem('vm_areaView', areaViewMode);
