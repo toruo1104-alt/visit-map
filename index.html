@@ -901,8 +901,13 @@
         const lng = parseFloat(item.経度), lat = parseFloat(item.緯度);
         if (isNaN(lng) || isNaN(lat)) return;
         const addr = (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? item.住所 : (deriveAddress(lng, lat) || '');
-        showBlockOrBox([lng, lat], addr);   // 住所選択時と同じ街区の赤枠
-        if (addr) showAreaLabel(addr);      // 上部に住所ラベル
+        arriveAt([lng, lat], 18, true, addr);   // 住所選択時と同じ：flyToで遷移＋赤枠＋上部ラベル
+    }
+    // 新規登録フォームの住所タップ → 同様に新規地点の番地を赤枠表示＋遷移する。
+    function outlineNewAddr() {
+        if (isNaN(newPinLng) || isNaN(newPinLat)) return;
+        const addr = newPinAddress || (deriveAddress(newPinLng, newPinLat) || '');
+        arriveAt([newPinLng, newPinLat], 18, true, addr);
     }
     // 吹き出し内の未指定住所(.derived-addr[data-stored=0])を、街区内包方式で算出して表示に反映
     function fillDerivedAddress(rootEl) {
@@ -925,6 +930,7 @@
     }
     // 新規登録フォームで指定中の住所（登録時に送信）
     let newPinAddress = '';
+    let newPinLng = NaN, newPinLat = NaN; // 新規登録地点の座標（住所タップで赤枠表示するのに使う）
     function pickAddressForNew() {
         openAreaNav(function (addr) {
             newPinAddress = addr;
@@ -935,7 +941,7 @@
     // 新規登録フォームに入れる「住所」行
     function newAddrRowHtml() {
         return `<div style="font-size:14px; color:#555; margin:-2px 0 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
-            + `🏠 <span id="new-addr-text">${newPinAddress || '（住所未指定）'}</span>`
+            + `🏠 <span id="new-addr-text" style="cursor:pointer;" title="タップで番地を赤枠表示" onclick="outlineNewAddr()">${newPinAddress || '（住所未指定）'}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressForNew()">住所を指定</button>`
             + `</div>`;
     }
@@ -1266,6 +1272,7 @@
         const lngVal = parseFloat(lngLat.lng);
         // タップ地点から住所を逆算して初期値に（「住所を指定」で手動上書きも可）
         newPinAddress = deriveAddress(lngVal, latVal) || '';
+        newPinLng = lngVal; newPinLat = latVal; // 住所タップで赤枠表示するため新規地点の座標を保持
 
         let formHtml = `<div class="popup-content">`;
         if (forcedType === '戸建て') {
