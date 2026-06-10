@@ -100,7 +100,7 @@
 
         /* ── 属性・訪問結果の横並びレイアウト（ラベル左・セレクト右） ── */
         .inline-group { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-        .inline-group label { min-width: 72px; font-size: 11px; font-weight: bold; white-space: nowrap; flex-shrink: 0; margin: 0; }
+        .inline-group label { min-width: 6.5em; font-size: 11px; font-weight: bold; white-space: nowrap; flex-shrink: 0; margin: 0; }
         .inline-group select { flex: 1; max-width: 200px; box-sizing: border-box; padding: 4px; font-size: 12px; }
 
         /* ── 処理中インジケーター（サーバー通信中に表示） ── */
@@ -1285,13 +1285,13 @@
             formHtml += `
                 <div class="building-title">🏢 集合住宅を新規登録</div>
                 ${newAddrRowHtml()}
-                <div class="form-group"><label>建物名</label><input type="text" id="new-name" placeholder="例：ハイツ小岩"></div>
+                <div class="form-group"><label>建物名</label><input type="text" id="new-name" placeholder="例：ハイツ小岩" style="background:#FFF9DD;"></div>
                 <div class="form-row" style="display:flex; gap:4px;">
                     <div class="form-group" style="flex:1;"><label>階数</label>
-                        <select id="new-floors" onchange="generateSetupGrid()">${[1,2,3,4,5,6,7,8,9,10].map(v=>`<option value="${v}">${v}階</option>`).join('')}</select>
+                        <select id="new-floors" onchange="generateSetupGrid()" style="background:#FFF9DD;">${[1,2,3,4,5,6,7,8,9,10].map(v=>`<option value="${v}">${v}階</option>`).join('')}</select>
                     </div>
-                    <div class="form-group" style="flex:1;"><label>最大部屋番号(下2桁)</label>
-                        <select id="new-maxroom" onchange="generateSetupGrid()">${Array.from({length:20},(_,i)=>i+1).map(v=>`<option value="${v}">${String(v).padStart(2,'0')}</option>`).join('')}</select>
+                    <div class="form-group" style="flex:1;"><label>最大部屋数</label>
+                        <select id="new-maxroom" onchange="generateSetupGrid()" style="background:#FFF9DD;">${Array.from({length:20},(_,i)=>i+1).map(v=>`<option value="${v}">${String(v).padStart(2,'0')}</option>`).join('')}</select>
                     </div>
                 </div>
                 <div class="form-group" style="margin:2px 0;">
@@ -1301,9 +1301,9 @@
                 </div>
                 <label style="font-size:11px; font-weight:bold;">緑=部屋あり（初期は全選択）。無い部屋をタップで外す</label>
                 <div id="setup-grid-container" style="max-height:120px; overflow:auto; margin-bottom:8px;"></div>
-                <div class="form-group"><label>オートロック</label><select id="new-lock"><option value="なし">なし</option><option value="あり">あり</option></select></div>
-                <div class="form-group"><label>管理人</label><select id="new-manager"><option value="なし">なし</option><option value="あり">あり</option></select></div>
-                <div class="form-group"><label>構成属性</label><select id="new-attribute"><option value="不明">不明</option><option value="ファミリー">ファミリー</option><option value="シングル">シングル</option><option value="混在">混在</option></select></div>
+                <div class="inline-group"><label>オートロック</label><select id="new-lock"><option value="なし">なし</option><option value="あり">あり</option></select></div>
+                <div class="inline-group"><label>管理人</label><select id="new-manager"><option value="なし">なし</option><option value="あり">あり</option></select></div>
+                <div class="inline-group"><label>構成属性</label><select id="new-attribute"><option value="不明">不明</option><option value="ファミリー">ファミリー</option><option value="シングル">シングル</option><option value="混在">混在</option></select></div>
                 <div class="form-group memo-empty"><label>メモ</label><input type="text" id="new-memo"></div>
                 <button class="submit-btn" id="reg-btn" onclick="submitNewLocation(${latVal}, ${lngVal}, '集合住宅')">登録</button>
                 <button class="detail-toggle" onclick="togglePopupDetail(this)">▼ 詳細を表示</button>
