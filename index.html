@@ -890,9 +890,19 @@
         const lng = parseFloat(item.経度), lat = parseFloat(item.緯度);
         const shown = stored || '判定中…';
         return `<div style="font-size:14px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
-            + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}">${shown}</span>`
+            + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}" style="cursor:pointer;" title="タップで番地を赤枠表示" onclick="outlineAddrForPin(${item.rowNumber})">${shown}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressFor(${item.rowNumber})">住所を指定</button>`
             + `</div>`;
+    }
+    // 吹き出しの住所をタップ → 住所選択時と同じ赤枠（街区）を表示し、上部に住所ラベルを出す。
+    function outlineAddrForPin(rowNumber) {
+        const item = currentData.find(d => d.rowNumber === rowNumber);
+        if (!item) return;
+        const lng = parseFloat(item.経度), lat = parseFloat(item.緯度);
+        if (isNaN(lng) || isNaN(lat)) return;
+        const addr = (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? item.住所 : (deriveAddress(lng, lat) || '');
+        showBlockOrBox([lng, lat], addr);   // 住所選択時と同じ街区の赤枠
+        if (addr) showAreaLabel(addr);      // 上部に住所ラベル
     }
     // 吹き出し内の未指定住所(.derived-addr[data-stored=0])を、街区内包方式で算出して表示に反映
     function fillDerivedAddress(rootEl) {
