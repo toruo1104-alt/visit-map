@@ -34,14 +34,17 @@
         .area-opt { background: #5E9DB8; color: #fff; border: none; border-radius: 6px; padding: 10px 14px; font-size: 14px; cursor: pointer; min-width: 72px; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
         .area-opt-num { min-width: 0; width: 46px; padding: 9px 0; text-align: center; }
         /* 地区選択をSVGマップで表示するステップ（位置・形は江戸川区の地区図を模式化） */
+        #area-view-toggle { flex: 0 0 auto; min-width: 56px; text-align: center; background: #f0f0f0; border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
         #area-modal-body.is-map { display: block; padding: 8px; }
+        #area-modal-body.is-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        #area-modal-body.is-list .area-opt { min-width: 0; width: 100%; box-sizing: border-box; }
         .area-map { width: 100%; }
         .area-map svg { width: 100%; height: auto; display: block; touch-action: manipulation; }
         .area-map .dist { fill: #cfe3ec; stroke: #2E6E88; stroke-width: 2.5; stroke-linejoin: round; cursor: pointer; transition: fill .12s; }
         .area-map .dist:hover { fill: #9cc7da; }
         .area-map .dist:active { fill: #5E9DB8; }
-        .area-map .lbl { fill: #102733; font-size: 26px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; pointer-events: none; user-select: none; }
-        .area-map .lbl.sm { font-size: 19px; }
+        .area-map .lbl { fill: #102733; font-size: 38px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; pointer-events: none; user-select: none; }
+        .area-map .lbl.sm { font-size: 28px; }
         /* 移動後の地域名ラベル（画面上部・常時表示・タップで枠/表示を消去） */
         #area-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(44,62,80,0.92); color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); max-width: 92%; text-align: center; cursor: pointer; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
 
@@ -182,6 +185,7 @@
         <div id="area-modal-head">
             <button id="area-back-btn">← 戻る</button>
             <span id="area-modal-title">地区を選択</span>
+            <button id="area-view-toggle" onclick="toggleAreaView()">☰ 一覧</button>
             <button id="area-close-btn" onclick="closeAreaNav()">✕</button>
         </div>
         <div id="area-modal-body"></div>
@@ -663,6 +667,14 @@
     </svg></div>`;
     const AREA_PROXIMITY = '139.89036779018497,35.72063279470909'; // Mapboxフォールバック検索の優先中心
     let areaSel = { district: null, chome: null };
+    let areaViewMode = localStorage.getItem('vm_areaView') || 'map'; // 'map'=地区図 / 'list'=一覧グリッド
+    // 一覧グリッドの並び順（3列×4行で江戸川区の地図配置に近づけた）
+    const AREA_GRID_ORDER = ['南小岩','東小岩','北篠崎','東松本','西篠崎','上篠崎','鹿骨町','鹿骨','篠崎町','新堀','春江町','谷河内'];
+    function toggleAreaView() {
+        areaViewMode = (areaViewMode === 'map') ? 'list' : 'map';
+        localStorage.setItem('vm_areaView', areaViewMode);
+        renderAreaStep('district');
+    }
     let areaPickCallback = null; // 住所指定モード：番地確定時にこの関数へ住所文字列を渡す（無ければ通常＝地図移動）
     let suppressMapTapUntil = 0;  // この時刻まで地図タップ（新規登録）を無効化（住所モーダルを閉じた直後の誤爆防止）
 
@@ -685,15 +697,30 @@
     function renderAreaStep(step) {
         const title = document.getElementById('area-modal-title');
         const back = document.getElementById('area-back-btn');
+        const toggle = document.getElementById('area-view-toggle');
         const body = document.getElementById('area-modal-body');
         let html = '';
         if (step === 'district') {
             title.textContent = '地区を選択';
             back.style.visibility = 'hidden';
-            body.classList.add('is-map');          // 地区はSVGマップで表示
-            html = AREA_MAP_SVG;
+            toggle.style.display = '';             // 地区選択時だけ表示切替ボタンを出す
+            if (areaViewMode === 'map') {
+                toggle.textContent = '☰ 一覧';
+                body.classList.add('is-map');
+                body.classList.remove('is-list');
+                html = AREA_MAP_SVG;
+            } else {
+                toggle.textContent = '🗺 地図';
+                body.classList.add('is-list');
+                body.classList.remove('is-map');
+                AREA_GRID_ORDER.forEach(d => {
+                    html += `<button class="area-opt" onclick="selectArea('district','${d}')">${d}</button>`;
+                });
+            }
         } else if (step === 'chome') {
+            toggle.style.display = 'none';
             body.classList.remove('is-map');
+            body.classList.remove('is-list');
             title.textContent = areaSel.district + ' の丁目を選択';
             back.style.visibility = 'visible';
             back.onclick = () => renderAreaStep('district');
@@ -701,7 +728,9 @@
                 html += `<button class="area-opt" onclick="selectArea('chome',${c})">${c}丁目</button>`;
             });
         } else if (step === 'banchi') {
+            toggle.style.display = 'none';
             body.classList.remove('is-map');
+            body.classList.remove('is-list');
             title.textContent = areaSel.district + areaSel.chome + '丁目 の番地を選択';
             back.style.visibility = 'visible';
             back.onclick = () => renderAreaStep('chome');
