@@ -208,7 +208,13 @@
 </div>
 
 <script>
-    // 岡本様のトークンを設定済み
+    /* Mapbox 公開トークン（pk.）。岡本様のトークンを設定済み。
+       ※ このトークンはブラウザで地図タイル取得に使うため、閲覧者には必ず見える（クライアント側トークンは隠蔽不可）。
+          別ファイル化・難読化・GAS経由にしても見えるので「隠す」対策は無意味。流用対策は Mapbox 側で行う：
+            ① URL制限（URL restrictions）＝ 配信ドメインのみ許可【最重要】
+            ② 公開トークン(pk.)のみ・読み取り専用スコープ（sk. の秘密トークンは絶対にここへ置かない）
+            ③ 使用量アラート/上限を設定（万一の流用・課金暴走に備える）
+          手順は 導入手順書.md「5. Mapbox」を参照。露出済みトークンは新規発行＋URL制限＋差し替え（ローテーション）を推奨。 */
     const MY_TOKEN = 'pk.eyJ1IjoidG9ydW8xMTA0IiwiYSI6ImNtcHhiNHk5MTA0dXgycm9hY3F2NGQ5Nm0ifQ.qIgZvkXXSZWY1Mv9FszMJw';
     mapboxgl.accessToken = MY_TOKEN;
 
