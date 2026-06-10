@@ -112,6 +112,18 @@
         #busy-indicator .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: busy-spin 0.7s linear infinite; }
         @keyframes busy-spin { to { transform: rotate(360deg); } }
 
+        /* ── 確認ダイアログ（ネイティブ confirm/alert の代替・独自UI） ── */
+        #app-confirm-overlay { position: absolute; inset: 0; z-index: 10005; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; padding: 20px; }
+        #app-confirm-card { background: #fff; border-radius: 12px; width: min(340px, 92vw); box-shadow: 0 6px 24px rgba(0,0,0,0.35); padding: 18px 16px 14px; }
+        #app-confirm-msg { font-size: 16px; color: #2c3e50; line-height: 1.6; white-space: pre-line; margin-bottom: 16px; text-align: center; }
+        #app-confirm-btns { display: flex; gap: 10px; }
+        #app-confirm-btns button { flex: 1; padding: 12px 8px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
+        #app-confirm-cancel { background: #eef1f4; color: #555; border: 1px solid #d5dade; }
+        #app-confirm-ok { background: #5E9DB8; color: #fff; border: none; }
+        #app-confirm-ok.danger { background: #C75F56; } /* 削除・クリア等の破壊的操作は赤 */
+        body.large-ui #app-confirm-msg { font-size: 18px !important; }
+        body.large-ui #app-confirm-btns button { font-size: 17px !important; padding: 13px 8px !important; }
+
         /* ── モバイル自動拡大（マーカーサイズはJS管理のため指定なし） ── */
         @media (max-width: 600px) {
             .popup-content { width: min(320px, 92vw) !important; font-size: 14px !important; }
@@ -1077,12 +1089,14 @@
             return !isNaN(lng) && !isNaN(lat) && pointInRing(lng, lat, ring);
         }).map(d => d.rowNumber);
         if (!ids.length) { showToast('枠内にピンはありません', true); return; }
-        if (!confirm('枠内の ' + ids.length + ' 件のピンに「' + currentBoxAddr + '」を割り当てます。よろしいですか？')) return;
-        showBusy('割当中…');
         const addr = currentBoxAddr, n = ids.length;
-        apiCall('updateAddressBatch', { rowNumbers: ids, address: addr })
-            .then((latest) => { renderMarkers(latest); showToast(n + '件に「' + addr + '」を割り当てました', false); })
-            .catch(handleServerError).finally(hideBusy);
+        appConfirm('枠内の ' + n + ' 件のピンに\n「' + addr + '」\nを割り当てます。', { okLabel: '割り当てる' }).then(ok => {
+            if (!ok) return;
+            showBusy('割当中…');
+            apiCall('updateAddressBatch', { rowNumbers: ids, address: addr })
+                .then((latest) => { renderMarkers(latest); showToast(n + '件に「' + addr + '」を割り当てました', false); })
+                .catch(handleServerError).finally(hideBusy);
+        });
     }
     // 画面上部に選択した地域名（番地まで）を常時表示する（タップで消去できる）
     function showAreaLabel(text) {
@@ -1094,10 +1108,11 @@
     }
     // 住所表示をタップ → 枠線と住所表示を消すか確認してクリア
     function askClearAreaSelection() {
-        if (confirm('枠線と住所表示を消しますか？')) {
+        appConfirm('枠線と住所表示を消しますか？', { okLabel: '消す' }).then(ok => {
+            if (!ok) return;
             clearBanchiBox();
             document.getElementById('area-label').style.display = 'none';
-        }
+        });
     }
 
     // ピンが多いときは画面内だけ描画して負荷を抑える（少なければ全件表示）
@@ -1440,7 +1455,7 @@
         let name = '';
         if (type === '集合住宅') {
             name = document.getElementById('new-name').value;
-            if (!name) { alert('建物名を入力してください'); return; }
+            if (!name) { appAlert('建物名を入力してください'); return; }
         }
 
         let data = { type: type, name: name, lat: parseFloat(lat), lng: parseFloat(lng), memo: document.getElementById('new-memo').value, attribute: '不明', address: newPinAddress };
@@ -1558,6 +1573,45 @@
         el.style.display = 'block';
         clearTimeout(window._toastTimer);
         window._toastTimer = setTimeout(() => { el.style.display = 'none'; }, isError ? 8000 : 2500);
+    }
+
+    /* ── 確認ダイアログ（ネイティブ confirm/alert の代替・独自UI） ──
+       appConfirm(msg, opts) → Promise<boolean>。OK=true / キャンセル・枠外タップ・Esc=false。
+       opts: { okLabel: OKボタン文言, cancelLabel: キャンセル文言, danger: trueでOKを赤（破壊的操作） }
+       appAlert(msg) → OKボタンのみの通知。 */
+    function appConfirm(msg, opts) {
+        opts = opts || {};
+        return new Promise(resolve => {
+            let ov = document.getElementById('app-confirm-overlay');
+            if (!ov) {
+                ov = document.createElement('div');
+                ov.id = 'app-confirm-overlay';
+                ov.innerHTML = '<div id="app-confirm-card"><div id="app-confirm-msg"></div>'
+                    + '<div id="app-confirm-btns"><button id="app-confirm-cancel"></button><button id="app-confirm-ok"></button></div></div>';
+                document.body.appendChild(ov);
+            }
+            const okBtn = document.getElementById('app-confirm-ok');
+            const cancelBtn = document.getElementById('app-confirm-cancel');
+            document.getElementById('app-confirm-msg').textContent = msg;
+            okBtn.textContent = opts.okLabel || 'OK';
+            okBtn.classList.toggle('danger', !!opts.danger);
+            cancelBtn.textContent = opts.cancelLabel || 'キャンセル';
+            cancelBtn.style.display = opts.alertMode ? 'none' : '';
+            const close = (val) => {
+                ov.style.display = 'none';
+                document.removeEventListener('keydown', onKey, true);
+                resolve(val);
+            };
+            const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(false); } };
+            okBtn.onclick = () => close(true);
+            cancelBtn.onclick = () => close(false);
+            ov.onclick = (e) => { if (e.target === ov) close(false); }; // 枠外タップ＝キャンセル
+            document.addEventListener('keydown', onKey, true); // 既存のEsc処理（フォームを閉じる）より先に拾う
+            ov.style.display = 'flex';
+        });
+    }
+    function appAlert(msg) {
+        return appConfirm(msg, { okLabel: 'OK', alertMode: true });
     }
 
     // ✨ 最重要: スプレッドシートから読み込んだ瞬間に「絶対数値化」する描画処理
@@ -1776,8 +1830,9 @@
 
     // 編集前確認ダイアログ
     function confirmShugaEdit(rowNumber, btn) {
-        if (!confirm('建物情報を編集しますか？')) return;
-        showShugaEditForm(rowNumber, btn);
+        appConfirm('建物情報を編集しますか？', { okLabel: '編集する' }).then(ok => {
+            if (ok) showShugaEditForm(rowNumber, btn);
+        });
     }
 
     // 集合住宅の建物情報を編集するフォームを表示（詳細表示を差し替え）
@@ -1837,7 +1892,7 @@
     // 集合住宅の編集内容を保存
     function saveShugaEdit(rowNumber, btn) {
         const name = document.getElementById('new-name').value;
-        if (!name) { alert('建物名を入力してください'); return; }
+        if (!name) { appAlert('建物名を入力してください'); return; }
         const { floors, maxRoom } = getGridDims();
         // 現在のグリッド範囲内の選択のみを有効として保存
         const valid = gridActiveRooms.filter(rn => Math.floor(rn / 100) <= floors && (rn % 100) <= maxRoom).sort((a, b) => a - b);
@@ -2058,11 +2113,13 @@
 
     // ピン（地点）の削除。実行前に必ず確認する
     function confirmDelete(rowNumber) {
-        if (!confirm("このピンを削除します。\n登録内容・履歴もすべて消え、元に戻せません。\n\n削除してよろしいですか？")) return;
-        showBusy('更新中…');
-        apiCall('deleteLocation', { rowNumber: rowNumber })
-            .then((latest) => { showToast('削除しました', false); renderMarkers(latest); })
-            .catch(handleServerError).finally(hideBusy);
+        appConfirm("このピンを削除します。\n登録内容・履歴もすべて消え、元に戻せません。", { okLabel: '削除する', danger: true }).then(ok => {
+            if (!ok) return;
+            showBusy('更新中…');
+            apiCall('deleteLocation', { rowNumber: rowNumber })
+                .then((latest) => { showToast('削除しました', false); renderMarkers(latest); })
+                .catch(handleServerError).finally(hideBusy);
+        });
     }
 
     function saveMemo(rowNumber) {
@@ -2074,12 +2131,13 @@
     }
 
     function clearMemo(rowNumber) {
-        if (confirm("メモをクリアしますか？\n「OK」でクリア、「キャンセル」で戻る")) {
+        appConfirm("メモをクリアしますか？", { okLabel: 'クリアする', danger: true }).then(ok => {
+            if (!ok) return;
             showBusy('更新中…');
             apiCall('updateLocation', { rowNumber: rowNumber, status: null, memoText: null, isClearMemo: true })
                 .then((latest) => { applyInPlace(rowNumber, latest); showToast('メモを削除しました', false); })
                 .catch(handleServerError).finally(hideBusy);
-        }
+        });
     }
 
     // 集合住宅の吹き出しを、閉じずにその場で最新化する（履歴クリア後などに使用）
@@ -2098,12 +2156,14 @@
 
     // 履歴欄(R列)をすべてクリアする。削除と同様に実行前に必ず確認する。
     function confirmClearHistory(rowNumber, isShuga) {
-        if (!confirm("この地点の履歴欄をすべてクリアします。\n元に戻せません。\n\n実行してよろしいですか？")) return;
-        showBusy('更新中…');
-        apiCall('clearHistory', { rowNumber: rowNumber }).then((latest) => {
-            applyInPlace(rowNumber, latest); // 種別は自動判別（戸建て/集合住宅で共通）
-            showToast('履歴欄をクリアしました', false);
-        }).catch(handleServerError).finally(hideBusy);
+        appConfirm("この地点の履歴欄をすべてクリアします。\n元に戻せません。", { okLabel: 'クリアする', danger: true }).then(ok => {
+            if (!ok) return;
+            showBusy('更新中…');
+            apiCall('clearHistory', { rowNumber: rowNumber }).then((latest) => {
+                applyInPlace(rowNumber, latest); // 種別は自動判別（戸建て/集合住宅で共通）
+                showToast('履歴欄をクリアしました', false);
+            }).catch(handleServerError).finally(hideBusy);
+        });
     }
 </script>
 
