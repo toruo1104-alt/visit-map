@@ -49,8 +49,8 @@
         #area-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(44,62,80,0.92); color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); max-width: 92%; text-align: center; cursor: pointer; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
 
         /* ポップアップ共通 */
-        /* touch-action: 吹き出し上のピンチで画面全体がズームしてしまうのを防ぐ（スクロールは可） */
-        .mapboxgl-popup, .popup-content { touch-action: pan-x pan-y; }
+        /* touch-action: 吹き出し・住所モーダル上のピンチで画面全体がズームしてしまうのを防ぐ（スクロールは可） */
+        .mapboxgl-popup, .popup-content, #area-modal { touch-action: pan-x pan-y; }
         .popup-content { width: 290px; max-height: 60vh; overflow-y: auto; font-size: 13px; color: #333; }
         .building-title { font-weight: bold; font-size: 15px; border-bottom: 2px solid #333; padding-bottom: 4px; margin-bottom: 8px; }
         
@@ -145,8 +145,8 @@
         .popup-content:not(.detail) .memo-empty { display: none !important; }
         /* 詳細表示は項目が多いので、縦を長めにしてスクロールを減らす */
         .popup-content.detail { max-height: 82vh !important; }
-        .detail-toggle { width: 100%; margin-top: 8px; padding: 7px; background: #4A78B0; color: #fff; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
-        body.large-ui .detail-toggle { font-size: 17px !important; padding: 8px 12px !important; }
+        .detail-toggle { display: block; width: auto; margin: 8px auto 0; padding: 4px 12px; background: #eef1f4; color: #8a97a5; border: 1px solid #dfe4e9; border-radius: 4px; font-size: 12px; font-weight: normal; cursor: pointer; }
+        body.large-ui .detail-toggle { font-size: 13px !important; padding: 5px 14px !important; }
 
         /* ── 表示の重なり順：吹き出し(50) ＞ GPS青ポチ(5) ＞ 訪問先ピン(3) ──
               ピンには動的にz-indexが付くことがあるため !important で固定して青ポチを前面に保つ */
@@ -1232,10 +1232,10 @@
         if (e.key === 'Escape') closeOpenForms();
     });
 
-    // 吹き出し上でのピンチ（2本指）による画面ズームを抑止する。
+    // 吹き出し・住所モーダル上でのピンチ（2本指）による画面ズームを抑止する。
     // ※ iOS Safari は viewport の user-scalable=no を無視するため、ジェスチャを直接 preventDefault する。
     //    地図(canvas)上のピンチは対象外なので、地図のズームは従来どおり効く。
-    function isOnPopup(t) { return t && t.closest && t.closest('.mapboxgl-popup'); }
+    function isOnPopup(t) { return t && t.closest && t.closest('.mapboxgl-popup, #area-modal'); }
     ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => {
         document.addEventListener(ev, (e) => { if (isOnPopup(e.target)) e.preventDefault(); }, { passive: false });
     });
