@@ -215,7 +215,7 @@
             ② 公開トークン(pk.)のみ・読み取り専用スコープ（sk. の秘密トークンは絶対にここへ置かない）
             ③ 使用量アラート/上限を設定（万一の流用・課金暴走に備える）
           手順は 導入手順書.md「5. Mapbox」を参照。露出済みトークンは新規発行＋URL制限＋差し替え（ローテーション）を推奨。 */
-    const MY_TOKEN = 'pk.eyJ1IjoidG9ydW8xMTA0IiwiYSI6ImNtcHhiNHk5MTA0dXgycm9hY3F2NGQ5Nm0ifQ.qIgZvkXXSZWY1Mv9FszMJw';
+    const MY_TOKEN = 'pk.eyJ1IjoidG9ydW8xMTA0IiwiYSI6ImNtcTdlOGp2MzBhY3QycXBocno2OHQ5dmoifQ.bfkHvR5OmkacGJsDorHL5Q';
     mapboxgl.accessToken = MY_TOKEN;
 
     /* =========================================================================
@@ -402,7 +402,7 @@
 
     const map = new mapboxgl.Map({
         container: 'map',
-        style: 'mapbox://styles/mapbox/streets-v12',
+        style: 'mapbox://styles/toruo1104/cmq7cda6y001g01sqf3aogpwy',
         center: [139.89036779018497, 35.72063279470909], // 既定の中心位置
         zoom: 16,
         bearingSnap: 18 // 北付近の小さな（意図しない）回転は指を離すと北に戻す＝誤回転を抑制
