@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>map tool</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗺️</text></svg>">
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -39,7 +40,7 @@
         #area-modal-body.is-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
         #area-modal-body.is-list .area-opt { min-width: 0; width: 100%; box-sizing: border-box; }
         .area-map { width: 100%; }
-        .area-map svg { width: 100%; height: auto; display: block; touch-action: manipulation; }
+        .area-map svg { width: 100%; height: auto; max-height: 62vh; display: block; touch-action: manipulation; } /* 横向き等の低い画面でもモーダル内に収める */
         .area-map .dist { fill: #cfe3ec; stroke: #2E6E88; stroke-width: 2.5; stroke-linejoin: round; cursor: pointer; transition: fill .12s; }
         .area-map .dist:hover { fill: #9cc7da; }
         .area-map .dist:active { fill: #5E9DB8; }
@@ -60,6 +61,7 @@
         .form-group input, .form-group select, .form-group textarea { width: 100%; box-sizing: border-box; padding: 4px; font-size: 12px; }
         .btn-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
         .submit-btn { display: block; width: 100%; padding: 8px; background: #5E9DB8; color: white; border: none; font-weight: bold; border-radius: 4px; cursor: pointer; }
+        .btn-row .submit-btn { width: auto; flex: 1; } /* ボタン列の中（編集フォームの保存/閉じる）では横並びを保つ */
         .clear-btn { background: #C75F56; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
         .save-btn { background: #5FA97D; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
 
@@ -257,13 +259,13 @@
     function clearSession() {
         try { localStorage.removeItem(SESSION_TOKEN_KEY); localStorage.removeItem(SESSION_TS_KEY); } catch (e) {}
     }
-    // 保存トークンが「保存から30分以内 かつ JWT未失効」なら返す。だめなら null。
+    // 保存トークンが「保存上限内 かつ JWT未失効」なら返す。だめなら null。
     function loadValidSession() {
         try {
             const token = localStorage.getItem(SESSION_TOKEN_KEY);
             const ts = parseInt(localStorage.getItem(SESSION_TS_KEY) || '0', 10);
             if (!token || !ts) return null;
-            if (Date.now() - ts > SESSION_MAX_MS) return null; // 保存から30分超
+            if (Date.now() - ts > SESSION_MAX_MS) return null; // 保存上限(12時間)超
             const payload = JSON.parse(decodeURIComponent(escape(atob(
                 token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
             ))));
@@ -321,7 +323,7 @@
     }
     window.addEventListener('load', initScale);
     window.addEventListener('load', () => {
-        // まず30分以内の保存セッションで復帰を試み、その後 GIS を初期化（失効後の再サインイン用）
+        // まず未失効の保存セッションで復帰を試み、その後 GIS を初期化（失効後の再サインイン用）
         tryResumeSession();
         initGoogleSignIn();
     });
@@ -356,7 +358,7 @@
             ))));
             console.log('サインイン:', payload.email, payload.name);
         } catch (e) {}
-        saveSession(ID_TOKEN); // 30分セッションとして保存
+        saveSession(ID_TOKEN); // 保存セッションとして記録（失効まで自動復帰）
         enterApp();
     }
 
@@ -478,6 +480,13 @@
         const raw = String(item.特記事項 || '');
         const m = raw.match(/^オートロック:(?:あり|なし)\s*\/\s*([\s\S]*)$/);
         return m ? m[1] : raw;
+    }
+
+    // ユーザー入力（建物名・メモ・住所等）をHTMLへ埋め込む際のエスケープ（& や < による表示崩れを防ぐ）
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+        ));
     }
 
     // ポップアップが画面内に収まるよう、ピンを画面の下寄り中央へ寄せる（上向き吹き出し用・簡易版）
@@ -890,7 +899,7 @@
         const lng = parseFloat(item.経度), lat = parseFloat(item.緯度);
         const shown = stored || '判定中…';
         return `<div style="font-size:14px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
-            + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}" style="cursor:pointer;" title="タップで番地を赤枠表示" onclick="outlineAddrForPin(${item.rowNumber})">${shown}</span>`
+            + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}" style="cursor:pointer;" title="タップで番地を赤枠表示" onclick="outlineAddrForPin(${item.rowNumber})">${escHtml(shown)}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressFor(${item.rowNumber})">住所を指定</button>`
             + `</div>`;
     }
@@ -941,7 +950,7 @@
     // 新規登録フォームに入れる「住所」行
     function newAddrRowHtml() {
         return `<div style="font-size:14px; color:#555; margin:-2px 0 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
-            + `🏠 <span id="new-addr-text" style="cursor:pointer;" title="タップで番地を赤枠表示" onclick="outlineNewAddr()">${newPinAddress || '（住所未指定）'}</span>`
+            + `🏠 <span id="new-addr-text" style="cursor:pointer;" title="タップで番地を赤枠表示" onclick="outlineNewAddr()">${escHtml(newPinAddress || '（住所未指定）')}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressForNew()">住所を指定</button>`
             + `</div>`;
     }
@@ -1641,7 +1650,7 @@
         const memoCls = (item.特記事項 && String(item.特記事項).trim()) ? '' : ' memo-empty'; // 空メモは簡易表示で隠す
 
         return `
-            <div class="building-title">${item['建物名 / 世帯名'] || '戸建て'}</div>
+            <div class="building-title">${escHtml(item['建物名 / 世帯名'] || '戸建て')}</div>
             ${addrRowHtml(item)}
             <div class="inline-group">
                 <label>属性</label>
@@ -1666,7 +1675,7 @@
 
             <div class="memo-section${memoCls}">
                 <label style="font-size:11px; font-weight:bold;">メモ</label>
-                <textarea id="memo-${item.rowNumber}" rows="2" style="width:100%; font-size:12px;" readonly onpointerdown="this.removeAttribute('readonly')">${item.特記事項 || ''}</textarea>
+                <textarea id="memo-${item.rowNumber}" rows="2" style="width:100%; font-size:12px;" readonly onpointerdown="this.removeAttribute('readonly')">${escHtml(item.特記事項 || '')}</textarea>
                 <div class="btn-row detail-only">
                     <button class="save-btn" onclick="saveMemo(${item.rowNumber})">メモ保存</button>
                     <button class="clear-btn" onclick="clearMemo(${item.rowNumber})">メモ削除</button>
@@ -1714,7 +1723,7 @@
         gridHtml += '</tbody></table></div>';
 
         return `
-            <div class="building-title">${first['建物名 / 世帯名']}</div>
+            <div class="building-title">${escHtml(first['建物名 / 世帯名'])}</div>
             ${addrRowHtml(first)}
             <div style="font-size:11px; color:#666; margin-bottom:4px;">
                 管理人: ${first.管理人} ｜ 構成: ${first.属性} ｜ オートロック: ${getAutolock(first)}
@@ -1724,7 +1733,7 @@
 
             <div class="memo-section${memoCls}">
                 <label style="font-size:11px; font-weight:bold;">メモ</label>
-                <textarea id="memo-${first.rowNumber}" rows="1" style="width:100%; font-size:11px;" readonly onpointerdown="this.removeAttribute('readonly')">${memoText}</textarea>
+                <textarea id="memo-${first.rowNumber}" rows="1" style="width:100%; font-size:11px;" readonly onpointerdown="this.removeAttribute('readonly')">${escHtml(memoText)}</textarea>
                 <div class="btn-row detail-only">
                     <button class="save-btn" onclick="saveMemo(${first.rowNumber})">メモ保存</button>
                     <button class="clear-btn" onclick="clearMemo(${first.rowNumber})">メモ削除</button>
@@ -1762,17 +1771,16 @@
         const lockOpts = ['なし','あり'].map(v => opt(v, v, lock)).join('');
         const mgrOpts = ['なし','あり'].map(v => opt(v, v, item.管理人)).join('');
         const attrOpts = ['不明','ファミリー','シングル','混在'].map(v => opt(v, v, item.属性)).join('');
-        const esc = (s) => String(s).replace(/"/g, '&quot;');
 
         const html = `
             <div class="building-title">✏️ 建物情報を編集</div>
-            <div class="form-group"><label>建物名</label><input type="text" id="new-name" value="${esc(item['建物名 / 世帯名'] || '')}"></div>
+            <div class="form-group"><label>建物名</label><input type="text" id="new-name" value="${escHtml(item['建物名 / 世帯名'] || '')}" style="background:#FFF9DD;"></div>
             <div class="form-row" style="display:flex; gap:4px;">
                 <div class="form-group" style="flex:1;"><label>階数</label>
-                    <select id="new-floors" onchange="renderRoomGrid()">${floorOpts}</select>
+                    <select id="new-floors" onchange="renderRoomGrid()" style="background:#FFF9DD;">${floorOpts}</select>
                 </div>
-                <div class="form-group" style="flex:1;"><label>最大部屋番号(下2桁)</label>
-                    <select id="new-maxroom" onchange="renderRoomGrid()">${roomOpts}</select>
+                <div class="form-group" style="flex:1;"><label>最大部屋数</label>
+                    <select id="new-maxroom" onchange="renderRoomGrid()" style="background:#FFF9DD;">${roomOpts}</select>
                 </div>
             </div>
             <div class="form-group" style="margin:2px 0;">
@@ -1782,10 +1790,10 @@
             </div>
             <label style="font-size:11px; font-weight:bold;">緑=有効。不要な部屋をタップで外す</label>
             <div id="setup-grid-container" style="max-height:120px; overflow:auto; margin-bottom:8px;"></div>
-            <div class="form-group"><label>オートロック</label><select id="new-lock">${lockOpts}</select></div>
-            <div class="form-group"><label>管理人</label><select id="new-manager">${mgrOpts}</select></div>
-            <div class="form-group"><label>構成属性</label><select id="new-attribute">${attrOpts}</select></div>
-            <div class="form-group"><label>メモ</label><input type="text" id="new-memo" value="${esc(memoText)}"></div>
+            <div class="inline-group"><label>オートロック</label><select id="new-lock">${lockOpts}</select></div>
+            <div class="inline-group"><label>管理人</label><select id="new-manager">${mgrOpts}</select></div>
+            <div class="inline-group"><label>構成属性</label><select id="new-attribute">${attrOpts}</select></div>
+            <div class="form-group"><label>メモ</label><input type="text" id="new-memo" value="${escHtml(memoText)}"></div>
             <div class="btn-row">
                 <button class="submit-btn" id="edit-save-btn" onclick="saveShugaEdit(${rowNumber}, this)">更新を保存</button>
                 <button class="clear-btn" onclick="cancelShugaEdit(${rowNumber}, this)">閉じる</button>
@@ -1793,6 +1801,9 @@
         `;
         btn.closest('.popup-content').innerHTML = html;
         renderRoomGrid();
+        // 編集フォームは縦に長いので、吹き出しが画面に収まるよう寄せ直す
+        const opened = currentMarkers.find(mk => { const p = mk.getPopup(); return p && p.isOpen(); });
+        if (opened) setTimeout(() => fitPopupInView(opened, 0), 30);
     }
 
     // 集合住宅の編集内容を保存
@@ -1835,6 +1846,10 @@
         if (item && container) {
             container.innerHTML = createShugaViewHtml([item]);
             fillDerivedAddress(container);
+            // 編集ボタンは詳細表示からのみ押せるため .detail は残っている。
+            // 作り直したトグルボタンの表記を実状態（詳細表示中）に合わせる。
+            const t = container.querySelector('.detail-toggle');
+            if (t && container.classList.contains('detail')) t.textContent = '▲ 詳細を隠す';
         } else {
             closeOpenForms();
         }
@@ -1878,8 +1893,7 @@
         }
 
         // この部屋の現在値（属性 or 訪問結果）。属性の選択肢に現在値を反映するために使う。
-        let curRoomVal = '';
-        try { curRoomVal = (JSON.parse((item && item.部屋ステータス) || '{}') || {})[roomNum] || ''; } catch(e){}
+        const curRoomVal = roomStatusOf(item, roomNum);
         // 現在値が属性(拒否/外国語/空き家)ならそれを選択。それ以外（未操作 or 訪問結果）は初期状態＝「訪問可」を選択。
         const isAttr = ['訪問拒否', '外国語', '空き家'].indexOf(curRoomVal) >= 0;
         const aSel = (v) => ((isAttr ? curRoomVal === v : v === '未訪問') ? 'selected' : '');
@@ -1921,6 +1935,11 @@
         const m = String(current || '').match(/不在\((\d+)回目\)/);
         const n = m ? parseInt(m[1], 10) + 1 : 1;
         return '不在(' + n + '回目)';
+    }
+
+    // 部屋の現在値（T列の部屋ステータスJSON）を安全に取り出す共通ヘルパー
+    function roomStatusOf(item, roomNum) {
+        try { return (JSON.parse((item && item.部屋ステータス) || '{}') || {})[roomNum] || ''; } catch (e) { return ''; }
     }
 
     // サーバー更新後の最新データを、ポップアップを閉じずにその場で反映する（種別を自動判別）。
@@ -1989,9 +2008,7 @@
         let status = val;
         if (val === '不在') {
             const item = currentData.find(d => d.rowNumber === buildingRow);
-            let cur = '';
-            try { cur = (JSON.parse((item && item.部屋ステータス) || '{}') || {})[roomNum] || ''; } catch(e){}
-            status = nextAbsence(cur);
+            status = nextAbsence(roomStatusOf(item, roomNum));
         }
         applyRoomChange(buildingRow, roomNum, status, true);
     }
