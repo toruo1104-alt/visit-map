@@ -230,9 +230,8 @@
     <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; color:#fff; clip-path:polygon(50% 2%,61% 35%,96% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,4% 35%,39% 35%);">外</span>外国語（☆・属性）</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#8C8C8C; border-radius:50%;">空</span>空き家/空き地（属性）</div>
     <div style="font-weight:bold; font-size:10px; color:#666; margin:6px 0 2px;">── 集合住宅ピン（構成属性）──</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#F2E394; border:1px solid #ccc; border-radius:4px;"></span>ファミリー</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#F2E394; border:1px solid #ccc; border-radius:4px;"></span>ファミリー・混在</div>
     <div class="legend-row"><span class="legend-chip" style="background:#5B8BB0; border-radius:4px;"></span>シングル</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; border-radius:4px;"></span>混在</div>
     <div class="legend-row"><span class="legend-chip" style="background:#8C8C8C; border-radius:4px;"></span>不明</div>
     <div style="font-weight:bold; font-size:10px; color:#666; margin:6px 0 2px;">── 集合住宅セル ──</div>
     <div class="legend-row"><span class="legend-chip" style="background:#CBE3F0; border:1px solid #ccc; color:#0d3c55;">1</span>不在(1回目)</div>
@@ -512,7 +511,7 @@
         switch (attr) {
             case 'ファミリー': return '#F2E394'; // 薄黄
             case 'シングル':   return '#5B8BB0'; // ブルー（くすみ）
-            case '混在':       return '#8E79AB'; // パープル（くすみ）
+            case '混在':       return '#F2E394'; // 薄黄（ファミリーと同色）
             default:           return '#8C8C8C'; // 不明など（既定・グレー）
         }
     }
@@ -654,8 +653,9 @@
         const wrap = document.createElement('div');
         wrap.innerHTML = attrChoiceHtml(btn.dataset.cur, btn.dataset.tpl, btn.dataset.room === '1');
         const grid = wrap.firstElementChild;
-        grid.dataset.tpl = btn.dataset.tpl;     // 新規フォーム用：選択後に現在値ボタンへ畳むための情報を引き継ぐ
+        grid.dataset.tpl = btn.dataset.tpl;     // 選択後・閉じた時に現在値ボタンへ畳むための情報を引き継ぐ
         grid.dataset.room = btn.dataset.room;
+        grid.dataset.cur = btn.dataset.cur;
         btn.replaceWith(grid);
     }
     // 新規フォーム用：タップで hidden input に値を入れ、表示を更新する
@@ -1864,8 +1864,8 @@
                 markerEl.innerHTML = units > 12 ? ICON_MANSION : ICON_APART;
                 // 背景＝構成属性（ファミリー/シングル等）で色分け
                 markerEl.style.background = shugaColor(firstItem.属性);
-                // 薄黄(ファミリー)背景では白シルエットが見えないため、濃い黄土色に切り替える
-                markerEl.style.color = (firstItem.属性 === 'ファミリー') ? '#8a7117' : '#fff';
+                // 薄黄(ファミリー/混在)背景では白シルエットが見えないため、濃い黄土色に切り替える
+                markerEl.style.color = (firstItem.属性 === 'ファミリー' || firstItem.属性 === '混在') ? '#8a7117' : '#fff';
                 // 枠＝オートロック（あり=くすみブリック / なし=くすみブルー）
                 markerEl.style.border = '3px solid ' + (getAutolock(firstItem) === 'あり' ? '#A8554E' : '#3E8E54');
                 popupHtml += createShugaViewHtml(items);
@@ -1886,8 +1886,8 @@
                 fillDerivedAddress(popup.getElement()); // 住所（街区内包方式）を算出して表示
                 fitPopupInView(marker, 0); // 部屋操作欄は最初から高さを確保するので追加余白は不要
             });
-            // 吹き出しを閉じたら、選択中の部屋ハイライトを消し、操作欄を初期表示に戻す（選択状態を解除）
-            popup.on('close', () => resetRoomActionPanel(popup));
+            // 吹き出しを閉じたら、展開中のUI（編集フォーム・詳細表示・属性4択・部屋操作欄）を初期状態へ戻す
+            popup.on('close', () => resetPopupView(popup, firstItem.rowNumber));
 
             // 【数値保証】グループ化時にパース済みの数値座標 [lng, lat] でマーカーを作成
             const marker = new mapboxgl.Marker(markerEl)
@@ -2133,6 +2133,35 @@
         root.querySelectorAll('.cell-operating').forEach(el => el.classList.remove('cell-operating'));
         const area = root.querySelector('#room-action-area');
         if (area) area.innerHTML = roomActionPlaceholder();
+    }
+
+    // 吹き出しを閉じたとき、展開していたUIをすべて初期状態へ戻す（次に開くと閉じた状態から始まる）。
+    // ①建物編集フォーム→通常表示（編集は破棄） ②詳細表示→簡易 ③属性4択の展開→現在値ボタン ④部屋操作欄→未選択
+    function resetPopupView(popup, rowNumber) {
+        if (!popup) return;
+        const root = (popup.getElement && popup.getElement()) || popup._content;
+        if (!root) return;
+        // ① 建物編集フォームを開いたまま閉じた場合は、通常の詳細表示へ作り直す
+        if (root.querySelector('#edit-save-btn')) {
+            const item = currentData.find(d => d.rowNumber === rowNumber);
+            const container = root.querySelector('.popup-content');
+            if (item && container) {
+                container.innerHTML = createShugaViewHtml([item]);
+                fillDerivedAddress(container);
+            }
+        }
+        // ② 詳細表示を簡易に戻す
+        root.querySelectorAll('.popup-content.detail').forEach(pc => pc.classList.remove('detail'));
+        const t = root.querySelector('.detail-toggle');
+        if (t) t.textContent = '▼ 詳細を表示';
+        // ③ 展開中の属性4択を現在値ボタンへ畳む（保存せず閉じた場合は元の値のまま）
+        root.querySelectorAll('.choice-grid[data-tpl]').forEach(grid => {
+            const wrap = document.createElement('div');
+            wrap.innerHTML = attrLineHtml(grid.dataset.cur || '', grid.dataset.tpl, grid.dataset.room === '1');
+            grid.replaceWith(wrap.firstElementChild);
+        });
+        // ④ 部屋の選択ハイライトと操作欄を初期化
+        resetRoomActionPanel(popup);
     }
 
     function showRoomAction(buildingRow, roomNum, cellEl) {
