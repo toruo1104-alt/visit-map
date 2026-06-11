@@ -105,6 +105,13 @@
         .inline-group label { min-width: 6.5em; font-size: 11px; font-weight: bold; white-space: nowrap; flex-shrink: 0; margin: 0; }
         .inline-group select { flex: 1; max-width: 200px; box-sizing: border-box; padding: 4px; font-size: 12px; }
 
+        /* ── 属性・訪問結果の選択ボタン（ネイティブselectの代替。色は凡例と同系） ── */
+        .choice-grid { display: grid; gap: 5px; margin: 2px 0 8px; }
+        .choice-grid.c4 { grid-template-columns: repeat(4, 1fr); }
+        .choice-grid.c3 { grid-template-columns: repeat(3, 1fr); }
+        .choice-btn { padding: 9px 2px; border-radius: 6px; font-size: 13px; font-weight: bold; text-align: center; cursor: pointer; border: 1.5px solid #c8cfd6; background: #fff; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
+        body.large-ui .choice-btn { font-size: 15px !important; padding: 11px 2px !important; }
+
         /* ── 処理中インジケーター（サーバー通信中に表示） ── */
         /* 更新中の操作ブロック用オーバーレイ（クリックを吸収して操作不可にする） */
         #busy-overlay { position: absolute; inset: 0; z-index: 10000; background: rgba(0,0,0,0.06); display: none; cursor: progress; }
@@ -214,7 +221,7 @@
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#4A78B0; border-radius:50%;">2</span>不在(2回目)</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#333; border-radius:50%;">3</span>不在(3回目)</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#DB7C2E; border-radius:50%;">会</span>会えた</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#3E8E54; border-radius:50%;">□</span>投函</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#3E8E54; border-radius:50%;">投</span>投函</div>
     <div class="legend-row"><span class="legend-chip" style="background:#B0554D; color:#fff; clip-path:polygon(50% 2%,61% 35%,96% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,4% 35%,39% 35%);">拒</span>訪問拒否（☆・属性）</div>
     <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; color:#fff; clip-path:polygon(50% 2%,61% 35%,96% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,4% 35%,39% 35%);">外</span>外国語（☆・属性）</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#8C8C8C; border-radius:50%;">空</span>空き家/空き地（属性）</div>
@@ -228,7 +235,7 @@
     <div class="legend-row"><span class="legend-chip" style="background:#A6CFE4; border:1px solid #ccc; color:#0d3c55;">2</span>不在(2回目)</div>
     <div class="legend-row"><span class="legend-chip" style="background:#7FB6D6; border:1px solid #ccc; color:#0d3c55;">3</span>不在(3回目)</div>
     <div class="legend-row"><span class="legend-chip" style="background:#F2C892; border:1px solid #ccc; color:#5b3b00;">会</span>会えた</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#CBE2CC; border:1px solid #ccc; color:#2E5E33;">□</span>投函</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#CBE2CC; border:1px solid #ccc; color:#2E5E33;">投</span>投函</div>
     <div class="legend-row"><span class="legend-chip" style="background:#A8554E; border:1px solid #ccc; color:#fff;">拒</span>訪問拒否（属性）</div>
     <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; border:1px solid #ccc; color:#fff;">外</span>外国語（属性）</div>
     <div class="legend-row"><span class="legend-chip" style="background:#D4D4D4; border:1px solid #ccc; color:#555;">空</span>空き家/空き地（属性）</div>
@@ -579,11 +586,65 @@
             return { char: String(n), bg: bg, color: n >= 4 ? '#ffffff' : '#0d3c55' };
         }
         if (status.indexOf('会えた')     >= 0) return { char: '会', bg: '#F2C892', color: '#5b3b00' }; // 目に優しいオレンジ
-        if (status.indexOf('投函')       >= 0) return { char: '□', bg: '#CBE2CC', color: '#2E5E33' };
+        if (status.indexOf('投函')       >= 0) return { char: '投', bg: '#CBE2CC', color: '#2E5E33' };
         if (status.indexOf('訪問拒否')   >= 0) return { char: '拒', bg: '#A8554E', color: '#ffffff' }; // くすみブリック
         if (status.indexOf('外国語')     >= 0) return { char: '外', bg: '#8E79AB', color: '#ffffff' }; // くすみパープル
         if (status.indexOf('空き家')     >= 0) return { char: '空', bg: '#D4D4D4', color: '#555555' };
         return { char: null, bg: '#E6F1F4', color: '#333333' }; // 未訪問（既定）
+    }
+
+    /* ── 集合住宅ピンのアイコン（SVG・白シルエット。窓は背景色＝構成属性の色が抜ける） ──
+       アパート＝低層横長（庇・窓4・中央玄関）/ マンション＝高層縦長（塔屋・窓3列・エントランス）。
+       マンションは縦長で細く見えるため、ピンに対する占有率を大きめにしてバランスを取る。 */
+    const ICON_APART = '<svg viewBox="0 0 24 24" style="width:58%;height:58%;fill:#fff;display:block;" aria-hidden="true"><path fill-rule="evenodd" d="M1.5 4.5 h21 v2.5 h-21 Z M3 7 h18 v14 h-18 Z M5.6 9.3 h3.2 v3 h-3.2 Z M15.2 9.3 h3.2 v3 h-3.2 Z M5.6 14.8 h3.2 v3 h-3.2 Z M15.2 14.8 h3.2 v3 h-3.2 Z M10.4 15 h3.2 v6 h-3.2 Z"/></svg>';
+    const ICON_MANSION = '<svg viewBox="0 0 24 24" style="width:76%;height:76%;fill:#fff;display:block;" aria-hidden="true"><path fill-rule="evenodd" d="M9 1.5 h6 v2.5 h-6 Z M5 4 h14 v17 h-14 Z M7 6 h2.2 v2.2 H7 Z M10.9 6 h2.2 v2.2 h-2.2 Z M14.8 6 h2.2 v2.2 h-2.2 Z M7 9.4 h2.2 v2.2 H7 Z M10.9 9.4 h2.2 v2.2 h-2.2 Z M14.8 9.4 h2.2 v2.2 h-2.2 Z M7 12.8 h2.2 v2.2 H7 Z M10.9 12.8 h2.2 v2.2 h-2.2 Z M14.8 12.8 h2.2 v2.2 h-2.2 Z M7 16.2 h2.2 v2.2 H7 Z M14.8 16.2 h2.2 v2.2 h-2.2 Z M10.7 16.4 h2.6 v4.6 h-2.6 Z"/></svg>';
+
+    /* ── 属性・訪問結果の選択UI（ネイティブselectの代替・ボタン式） ──
+       視認性向上のため選択肢を最初からボタンで並べ、現在値を凡例と同系色でハイライトする。
+       ・詳細/部屋操作: タップ＝即保存（従来のonchange相当）。保存後の再描画で新しい現在値が光る。
+       ・新規フォーム: タップ＝選択のみ（hidden input に値を保持し、登録ボタンで確定）＝pickNewChoice。 */
+    const ATTR_CHOICES = [
+        { v: '通常',     roomV: '未訪問',   label: '訪問可', on: '#7f8c8d', offText: '#555' },
+        { v: '訪問拒否', roomV: '訪問拒否', label: '拒否',   on: '#A8554E', offText: '#A8554E' },
+        { v: '外国語',   roomV: '外国語',   label: '外国語', on: '#8E79AB', offText: '#8E79AB' },
+        { v: '空き家',   roomV: '空き家',   label: '空き家', on: '#8C8C8C', offText: '#666' }
+    ];
+    const RESULT_CHOICES = [
+        { v: '不在',   label: '不在',   on: '#3D7FA8', offBg: '#CBE3F0', offText: '#0d3c55', offBd: '#9fc4da' },
+        { v: '会えた', label: '会えた', on: '#DB7C2E', offBg: '#F2C892', offText: '#5b3b00', offBd: '#ddb070' },
+        { v: '投函',   label: '投函',   on: '#3E8E54', offBg: '#CBE2CC', offText: '#2E5E33', offBd: '#a8cbaa' }
+    ];
+    function choiceBtnHtml(label, onStyle, offStyle, isOn, onclick) {
+        return `<button class="choice-btn" data-on="${onStyle}" data-off="${offStyle}" style="${isOn ? onStyle : offStyle}" onclick="${onclick}">${label}</button>`;
+    }
+    // 属性の4択ボタン。current=現在値、onclickTpl の %v が値に置換される。useRoomV=部屋用の値体系(未訪問)を使う
+    function attrChoiceHtml(current, onclickTpl, useRoomV) {
+        const isAttr = ['訪問拒否', '外国語', '空き家'].indexOf(current) >= 0;
+        return '<div class="choice-grid c4">' + ATTR_CHOICES.map(c => {
+            const val = useRoomV ? c.roomV : c.v;
+            const on = isAttr ? current === val : c.label === '訪問可'; // 属性でなければ「訪問可」が現在値
+            const onStyle = `background:${c.on}; border-color:${c.on}; color:#fff;`;
+            const offStyle = `color:${c.offText};`;
+            return choiceBtnHtml(c.label, onStyle, offStyle, on, onclickTpl.replace('%v', val));
+        }).join('') + '</div>';
+    }
+    // 訪問結果の3択ボタン。「不在(2回目)」のような値も先頭一致で不在をハイライトする
+    function resultChoiceHtml(current, onclickTpl) {
+        const cur = String(current || '');
+        return '<div class="choice-grid c3">' + RESULT_CHOICES.map(c => {
+            const on = cur.indexOf(c.v) === 0;
+            const onStyle = `background:${c.on}; border-color:${c.on}; color:#fff;`;
+            const offStyle = `background:${c.offBg}; border-color:${c.offBd}; color:${c.offText};`;
+            return choiceBtnHtml(c.label, onStyle, offStyle, on, onclickTpl.replace('%v', c.v));
+        }).join('') + '</div>';
+    }
+    // 新規フォーム用：タップで hidden input に値を入れ、ボタンのハイライトを付け替える
+    function pickNewChoice(inputId, val, btn) {
+        const input = document.getElementById(inputId);
+        if (input) input.value = val;
+        const grid = btn.closest('.choice-grid');
+        if (grid) grid.querySelectorAll('.choice-btn').forEach(b => b.setAttribute('style', b.getAttribute('data-off')));
+        btn.setAttribute('style', btn.getAttribute('data-on'));
     }
 
     // 広域表示（ズームがこの値未満）のときは戸建てを隠す
@@ -1192,7 +1253,7 @@
             return { char: String(n), color: n >= 3 ? '#1B4F72' : n === 2 ? '#4A78B0' : '#333333' };
         }
         if (s === '会えた')      return { char: '会', color: '#DB7C2E' }; // オレンジ
-        if (s === '投函')        return { char: '□', color: '#3E8E54' };
+        if (s === '投函')        return { char: '投', color: '#3E8E54' };
         if (s === '訪問拒否')    return { char: '拒', color: '#B0554D', star: true };
         if (s === '外国語')      return { char: '外', color: '#8E79AB', star: true };
         if (s === '空き家')      return { char: '空', color: '#8C8C8C' };
@@ -1365,23 +1426,12 @@
             formHtml += `
                 <div class="building-title">📍 戸建てを新規登録</div>
                 ${newAddrRowHtml()}
-                <div class="inline-group">
-                    <label>属性</label>
-                    <select id="new-attribute-k" style="background:#d2d2d2;">
-                        <option value="通常" selected>訪問可</option>
-                        <option value="訪問拒否">訪問拒否</option>
-                        <option value="外国語">外国語</option>
-                        <option value="空き家">空き家/空き地</option>
-                    </select>
-                </div>
-                <div class="inline-group">
-                    <label>訪問結果</label>
-                    <select id="new-status" style="background:#FFF9DD;">
-                        <option value="不在(1回目)" selected>不在</option>
-                        <option value="会えた">会えた</option>
-                        <option value="投函">投函</option>
-                    </select>
-                </div>
+                <input type="hidden" id="new-attribute-k" value="通常">
+                <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">属性</div>
+                ${attrChoiceHtml('通常', "pickNewChoice('new-attribute-k','%v',this)", false)}
+                <input type="hidden" id="new-status" value="不在">
+                <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">訪問結果</div>
+                ${resultChoiceHtml('不在', "pickNewChoice('new-status','%v',this)")}
                 <div class="form-group memo-empty"><label>メモ</label><textarea id="new-memo" rows="2"></textarea></div>
                 <button class="submit-btn" id="reg-btn" onclick="submitNewLocation(${latVal}, ${lngVal}, '戸建て')">登録</button>
                 <button class="detail-toggle" onclick="togglePopupDetail(this)">▼ 詳細を表示</button>
@@ -1523,7 +1573,8 @@
         let data = { type: type, name: name, lat: parseFloat(lat), lng: parseFloat(lng), memo: document.getElementById('new-memo').value, attribute: '不明', address: newPinAddress };
 
         if (type === '戸建て') {
-            data.status = document.getElementById('new-status').value;
+            const st = document.getElementById('new-status').value;
+            data.status = (st === '不在') ? '不在(1回目)' : st; // 選択ボタンの「不在」は初回として保存
             data.attribute = document.getElementById('new-attribute-k').value; // 通常/訪問拒否/外国語/空き家
         } else {
             data.floors = document.getElementById('new-floors').value;
@@ -1778,9 +1829,9 @@
 
             if (firstItem.種別 === '集合住宅') {
                 markerEl.className += ' marker-shuga';
-                // 戸数が12以下はアパート(🏨=窓の並ぶ低層建物)、13以上はマンション(🏢)
+                // 戸数が12以下はアパート(低層SVG)、13以上はマンション(高層SVG)。白シルエットで背景色(構成属性)が生きる
                 const units = parseInt(firstItem.総戸数) || (firstItem.有効部屋リスト ? String(firstItem.有効部屋リスト).split(',').filter(s => s !== '').length : 0);
-                markerEl.innerHTML = units > 12 ? '🏢' : '🏨';
+                markerEl.innerHTML = units > 12 ? ICON_MANSION : ICON_APART;
                 // 背景＝構成属性（ファミリー/シングル等）で色分け
                 markerEl.style.background = shugaColor(firstItem.属性);
                 // 枠＝オートロック（あり=くすみブリック / なし=くすみブルー）
@@ -1842,31 +1893,15 @@
         }
 
         const attr = item.属性;
-        const sel = (v) => attr === v ? 'selected' : '';
-        const normalSel = (attr === '訪問拒否' || attr === '外国語' || attr === '空き家') ? '' : 'selected';
         const memoCls = (item.特記事項 && String(item.特記事項).trim()) ? '' : ' memo-empty'; // 空メモは簡易表示で隠す
 
         return `
             <div class="building-title">${escHtml(item['建物名 / 世帯名'] || '戸建て')}</div>
             ${addrRowHtml(item)}
-            <div class="inline-group">
-                <label>属性</label>
-                <select style="background:#d2d2d2;" onchange="saveAttribute(${item.rowNumber}, this.value)">
-                    <option value="通常" ${normalSel}>訪問可</option>
-                    <option value="訪問拒否" ${sel('訪問拒否')}>訪問拒否</option>
-                    <option value="外国語" ${sel('外国語')}>外国語</option>
-                    <option value="空き家" ${sel('空き家')}>空き家/空き地</option>
-                </select>
-            </div>
-            <div class="inline-group">
-                <label>訪問結果</label>
-                <select style="background:#FFF9DD;" onchange="saveStatus(${item.rowNumber}, this.value)">
-                    <option value="">-- 選択 --</option>
-                    <option value="不在">不在</option>
-                    <option value="会えた">会えた</option>
-                    <option value="投函">投函</option>
-                </select>
-            </div>
+            <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">属性</div>
+            ${attrChoiceHtml(attr, `saveAttribute(${item.rowNumber}, '%v')`, false)}
+            <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">訪問結果</div>
+            ${resultChoiceHtml(item.最新ステータス, `saveStatus(${item.rowNumber}, '%v')`)}
             <div style="font-weight:bold; font-size:14px; margin-top:6px;">履歴欄</div>
             <div class="history-box">${historyHtml || '<div style="color:#aaa;">履歴なし</div>'}</div>
 
@@ -2055,7 +2090,7 @@
 
     // 部屋未選択時の操作欄プレースホルダ（押した後とおおよそ同じ高さを確保し、レイアウトの変動を抑える）
     function roomActionPlaceholder() {
-        return '<div style="min-height:180px; display:flex; align-items:center; justify-content:center; font-size:13px; color:#888; text-align:center;">🚪 部屋をタップして操作してください</div>';
+        return '<div style="min-height:210px; display:flex; align-items:center; justify-content:center; font-size:13px; color:#888; text-align:center;">🚪 部屋をタップして操作してください</div>';
     }
 
     // 吹き出しを閉じたときに、部屋の選択ハイライトと操作欄を初期状態へ戻す（選択状態を解除）。
@@ -2090,36 +2125,19 @@
             } catch(e){}
         }
 
-        // この部屋の現在値（属性 or 訪問結果）。属性の選択肢に現在値を反映するために使う。
+        // この部屋の現在値（属性 or 訪問結果）。選択ボタンのハイライトに使う。
         const curRoomVal = roomStatusOf(item, roomNum);
-        // 現在値が属性(拒否/外国語/空き家)ならそれを選択。それ以外（未操作 or 訪問結果）は初期状態＝「訪問可」を選択。
-        const isAttr = ['訪問拒否', '外国語', '空き家'].indexOf(curRoomVal) >= 0;
-        const aSel = (v) => ((isAttr ? curRoomVal === v : v === '未訪問') ? 'selected' : '');
 
         const hideNum = item && String(item.部屋番号非表示) === '1';
         const title = hideNum ? '🚪 部屋' : `🚪 ${roomNum}号室`;
 
-        // レイアウトは戸建ての詳細（inline-group：ラベル左・セレクト右）に合わせる。属性を上、訪問結果を下に。
+        // レイアウトは戸建ての詳細と統一（見出し＋選択ボタン）。属性を上、訪問結果を下に。
         const html = `
             <div style="font-weight:bold; margin-bottom:6px; font-size:12px;">${title}</div>
-            <div class="inline-group">
-                <label>属性</label>
-                <select style="background:#d2d2d2;" onchange="saveRoomState(${buildingRow}, ${roomNum}, this.value)">
-                    <option value="未訪問" ${aSel('未訪問')}>訪問可</option>
-                    <option value="訪問拒否" ${aSel('訪問拒否')}>訪問拒否</option>
-                    <option value="外国語" ${aSel('外国語')}>外国語</option>
-                    <option value="空き家" ${aSel('空き家')}>空き家/空き地</option>
-                </select>
-            </div>
-            <div class="inline-group">
-                <label>訪問結果</label>
-                <select style="background:#FFF9DD;" onchange="saveRoomStatus(${buildingRow}, ${roomNum}, this.value)">
-                    <option value="">-- 選択 --</option>
-                    <option value="不在">不在</option>
-                    <option value="会えた">会えた</option>
-                    <option value="投函">投函</option>
-                </select>
-            </div>
+            <div style="font-weight:bold; font-size:12px; margin:2px 0 4px;">属性</div>
+            ${attrChoiceHtml(curRoomVal, `saveRoomState(${buildingRow}, ${roomNum}, '%v')`, true)}
+            <div style="font-weight:bold; font-size:12px; margin:2px 0 4px;">訪問結果</div>
+            ${resultChoiceHtml(curRoomVal, `saveRoomStatus(${buildingRow}, ${roomNum}, '%v')`)}
             <div style="font-weight:bold; font-size:14px; margin-top:4px;">部屋の履歴:</div>
             <div class="history-box" style="min-height:46px; max-height:60px; margin-top:2px;">${historyHtml || '<div style="color:#aaa;">履歴なし</div>'}</div>
         `;
