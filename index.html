@@ -427,12 +427,33 @@
     const DEEP_LINK_PIN = _urlParams.get('pin');
     let deepLinkDone = false, deepLinkPinDone = false;
 
+    /* ── 表示位置の保存・復元（Androidのタブ破棄対策） ──
+       スマホのブラウザはメモリ不足時にタブを破棄し、戻ると全リロード＝初期位置に戻ってしまう。
+       moveend ごとに中心・ズームを localStorage に保存し、起動時はそこから再開する。 */
+    const VIEW_KEY = 'vm_lastView';
+    function loadSavedView() {
+        try {
+            const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null');
+            if (!v || !isFinite(v.lng) || !isFinite(v.lat) || !isFinite(v.zoom)) return null;
+            if (Date.now() - (v.ts || 0) > 24 * 60 * 60 * 1000) return null; // 古い保存は使わない
+            return v;
+        } catch (e) { return null; }
+    }
+    const savedView = loadSavedView();
+
     const map = new mapboxgl.Map({
         container: 'map',
         style: 'mapbox://styles/toruo1104/cmq7cda6y001g01sqf3aogpwy',
-        center: [139.89036779018497, 35.72063279470909], // 既定の中心位置
-        zoom: 16,
+        center: savedView ? [savedView.lng, savedView.lat] : [139.89036779018497, 35.72063279470909], // 前回位置 or 既定の中心
+        zoom: savedView ? savedView.zoom : 16,
         bearingSnap: 18 // 北付近の小さな（意図しない）回転は指を離すと北に戻す＝誤回転を抑制
+    });
+    // 表示位置を保存（パン・ズーム・flyTo すべて moveend で拾う）
+    map.on('moveend', () => {
+        try {
+            const c = map.getCenter();
+            localStorage.setItem(VIEW_KEY, JSON.stringify({ lng: c.lng, lat: c.lat, zoom: map.getZoom(), ts: Date.now() }));
+        } catch (e) {}
     });
 
     // 右上にコンパス（クリックで北が上に戻る）
@@ -896,11 +917,33 @@
             }
         }).catch(() => { hideBusy(); showToast('住所検索に失敗しました', true); });
     }
+    // 選択中の住所をURL(?area=)へ反映する（既存の外部リンク機能を流用）。
+    // タブ破棄や再読込が起きても、ページを更新すれば同じ場所＋赤枠に自動で戻れる。
+    // ?area= が解釈できる形式（「○○N丁目M番」または丁目なし地区名）のときだけ書き込む。
+    function setAreaUrl(label) {
+        try {
+            const u = new URL(location.href);
+            if (label && isAreaLinkable(label)) {
+                u.searchParams.set('area', label);
+                u.searchParams.delete('pin'); // 最後の操作を優先（リロード時に両方発火させない）
+            } else if (!label) {
+                u.searchParams.delete('area');
+            } else {
+                return; // 解釈できない住所はURLに書かない（リロード時のエラー表示を防ぐ）
+            }
+            history.replaceState(null, '', u);
+        } catch (e) {}
+    }
+    function isAreaLinkable(label) {
+        const m = String(label || '').match(/^(.+?)(\d+)丁目(\d+)番$/);
+        if (m && AREA_DATA[m[1]]) return true;
+        return AREA_DATA.hasOwnProperty(label) && AREA_DATA[label] === null; // 鹿骨町など丁目なし地区
+    }
     // 移動 → 街区を赤線で囲む（無ければ枠で代用）→ 地域名を表示 →（あれば）到着後処理
     function arriveAt(center, zoom, outline, label, onArrive) {
         map.flyTo({ center: center, zoom: zoom, duration: 1200 });
         if (outline) showBlockOrBox(center, label); else clearBanchiBox();
-        if (label) showAreaLabel(label);
+        if (label) { showAreaLabel(label); setAreaUrl(label); } // 住所表示と同時に ?area= も更新（復元用）
         if (typeof onArrive === 'function') onArrive();
     }
 
@@ -1112,6 +1155,7 @@
             if (!ok) return;
             clearBanchiBox();
             document.getElementById('area-label').style.display = 'none';
+            setAreaUrl(null); // 復元用の ?area= もURLから消す
         });
     }
 
@@ -1167,8 +1211,21 @@
 
     map.on('load', () => { /* データ取得はサインイン成功後（handleCredential）に行う */ });
 
-    // 他アプリ等から戻った時に地図が消えている対策：再表示時にサイズ再計算＋再描画（軽い処理）
-    function recoverMap() { try { map.resize(); map.triggerRepaint(); } catch (e) {} }
+    // 他アプリ等から戻った時に地図が消えている対策。
+    // ① まずサイズ再計算＋再描画（軽い処理）で復帰を試みる。
+    // ② WebGL（地図描画）コンテキストがOSに破棄されたまま復元されない場合は、ページを再読込して作り直す。
+    //    表示位置・サインイン・選択中の住所(?area=)は保存済みなので、再読込後も同じ状態に自動で戻る。
+    let glLost = false;
+    map.on('webglcontextlost', () => { glLost = true; });
+    map.on('webglcontextrestored', () => { glLost = false; });
+    function recoverMap() {
+        try {
+            map.resize(); map.triggerRepaint();
+            if (glLost) setTimeout(() => {
+                if (glLost && document.visibilityState === 'visible') location.reload();
+            }, 1200); // 復元イベントを少し待ち、戻らなければ再読込
+        } catch (e) {}
+    }
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') recoverMap(); });
     window.addEventListener('pageshow', recoverMap);
     window.addEventListener('focus', recoverMap);
