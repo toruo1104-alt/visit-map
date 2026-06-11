@@ -85,7 +85,7 @@
         /* 屋外・年配者向けの視認性強化：太字・濃い影・文字の縁取りでくっきり見せる */
         .custom-marker { display: flex; justify-content: center; align-items: center; font-weight: 900; border-radius: 50%; cursor: pointer; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.55); text-shadow: 0 1px 1.5px rgba(0,0,0,0.45); }
         .marker-kodedate { width: 24px; height: 24px; font-size: 13px; border: 2.5px solid #222; }
-        .marker-shuga { width: 28px; height: 28px; font-size: 16px; background: #6FAEC0; border: 2px solid white; border-radius: 6px; }
+        .marker-shuga { width: 28px; height: 28px; font-size: 16px; background: #8C8C8C; border: 2px solid white; border-radius: 6px; }
         /* 戸建ての「訪問拒否(拒)」「外国語(外)」は外枠を☆形にする（塗り＝属性色／白文字） */
         .marker-star { border: none !important; border-radius: 0 !important; box-shadow: none !important; background: transparent;
             clip-path: polygon(50% 2%, 61% 35%, 96% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 4% 35%, 39% 35%);
@@ -106,14 +106,14 @@
         .inline-group select { flex: 1; max-width: 200px; box-sizing: border-box; padding: 4px; font-size: 12px; }
 
         /* ── 属性・訪問結果の選択ボタン（ネイティブselectの代替。色は凡例と同系） ── */
-        .choice-grid { display: grid; gap: 5px; margin: 2px 0 8px; }
+        .choice-grid { display: grid; gap: 5px; margin: 2px 0 8px; flex-basis: 100%; } /* flex行内で展開された時は折り返して全幅を使う */
         .choice-grid.c4 { grid-template-columns: repeat(4, 1fr); }
         .choice-grid.c3 { grid-template-columns: repeat(3, 1fr); }
         .choice-btn { padding: 9px 2px; border-radius: 6px; font-size: 13px; font-weight: bold; text-align: center; cursor: pointer; border: 1.5px solid #c8cfd6; background: #fff; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
         body.large-ui .choice-btn { font-size: 15px !important; padding: 11px 2px !important; }
-        /* 属性の1行表示（ラベル＋現在値ボタンのみ。タップで4択に展開） */
-        .attr-line { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; }
-        .attr-line .choice-btn { min-width: 7.5em; padding: 7px 12px; }
+        /* 属性の現在値ボタン（住所行・部屋番号行の右端に置くコンパクト表示。タップで4択に展開） */
+        .attr-cur { min-width: 8.5em; padding: 4px 14px; margin-left: auto; }
+        body.large-ui .attr-cur { font-size: 14px !important; padding: 5px 14px !important; }
 
         /* ── 処理中インジケーター（サーバー通信中に表示） ── */
         /* 更新中の操作ブロック用オーバーレイ（クリックを吸収して操作不可にする） */
@@ -233,7 +233,7 @@
     <div class="legend-row"><span class="legend-chip" style="background:#F2E394; border:1px solid #ccc; border-radius:4px;"></span>ファミリー</div>
     <div class="legend-row"><span class="legend-chip" style="background:#5B8BB0; border-radius:4px;"></span>シングル</div>
     <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; border-radius:4px;"></span>混在</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#6FAEC0; border-radius:4px;"></span>不明</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#8C8C8C; border-radius:4px;"></span>不明</div>
     <div style="font-weight:bold; font-size:10px; color:#666; margin:6px 0 2px;">── 集合住宅セル ──</div>
     <div class="legend-row"><span class="legend-chip" style="background:#CBE3F0; border:1px solid #ccc; color:#0d3c55;">1</span>不在(1回目)</div>
     <div class="legend-row"><span class="legend-chip" style="background:#A6CFE4; border:1px solid #ccc; color:#0d3c55;">2</span>不在(2回目)</div>
@@ -513,7 +513,7 @@
             case 'ファミリー': return '#F2E394'; // 薄黄
             case 'シングル':   return '#5B8BB0'; // ブルー（くすみ）
             case '混在':       return '#8E79AB'; // パープル（くすみ）
-            default:           return '#6FAEC0'; // 不明など（既定・くすみティール）
+            default:           return '#8C8C8C'; // 不明など（既定・グレー）
         }
     }
 
@@ -642,27 +642,21 @@
             return choiceBtnHtml(c.label, onStyle, offStyle, on, onclickTpl.replace('%v', c.v));
         }).join('') + '</div>';
     }
-    // 属性の1行表示（ラベル＋現在値ボタンのみ）。普段は現在値だけを見せ、タップで4択に展開する。
-    function attrLineHtml(current, onclickTpl, useRoomV, small) {
+    // 属性の現在値ボタン（ラベル無し。住所行・部屋番号行の右端に置く）。タップで4択に展開する。
+    function attrLineHtml(current, onclickTpl, useRoomV) {
         const isAttr = ['訪問拒否', '外国語', '空き家'].indexOf(current) >= 0;
         const cur = (isAttr && ATTR_CHOICES.find(c => (useRoomV ? c.roomV : c.v) === current)) || ATTR_CHOICES[0];
-        const fs = small ? '12px' : '14px';
-        return `<div class="attr-line" data-cur="${current || ''}" data-tpl="${onclickTpl}" data-room="${useRoomV ? 1 : 0}" data-small="${small ? 1 : 0}">`
-            + `<span style="font-weight:bold; font-size:${fs};">属性</span>`
-            + `<button class="choice-btn" style="background:${cur.on}; border-color:${cur.on}; color:#fff;" onclick="expandAttrChoices(this)">${cur.label} ▾</button>`
-            + `</div>`;
+        return `<button class="choice-btn attr-cur" data-cur="${current || ''}" data-tpl="${onclickTpl}" data-room="${useRoomV ? 1 : 0}"`
+            + ` style="background:${cur.on}; border-color:${cur.on}; color:#fff;" onclick="expandAttrChoices(this)">${cur.label} ▾</button>`;
     }
-    // 1行表示をタップ → 4択ボタンに展開（選択すると即保存→再描画、新規は pickNewChoice が1行へ畳む）
+    // 現在値ボタンをタップ → 4択に展開（flex行内では折り返して全幅表示。選択すると保存/畳みで戻る）
     function expandAttrChoices(btn) {
-        const line = btn.closest('.attr-line');
-        if (!line) return;
         const wrap = document.createElement('div');
-        wrap.innerHTML = attrChoiceHtml(line.dataset.cur, line.dataset.tpl, line.dataset.room === '1');
+        wrap.innerHTML = attrChoiceHtml(btn.dataset.cur, btn.dataset.tpl, btn.dataset.room === '1');
         const grid = wrap.firstElementChild;
-        grid.dataset.tpl = line.dataset.tpl;     // 新規フォーム用：選択後に1行へ畳むための情報を引き継ぐ
-        grid.dataset.room = line.dataset.room;
-        grid.dataset.small = line.dataset.small;
-        line.replaceWith(grid);
+        grid.dataset.tpl = btn.dataset.tpl;     // 新規フォーム用：選択後に現在値ボタンへ畳むための情報を引き継ぐ
+        grid.dataset.room = btn.dataset.room;
+        btn.replaceWith(grid);
     }
     // 新規フォーム用：タップで hidden input に値を入れ、表示を更新する
     function pickNewChoice(inputId, val, btn) {
@@ -671,9 +665,9 @@
         const grid = btn.closest('.choice-grid');
         if (!grid) return;
         if (grid.dataset.tpl) {
-            // 属性（1行⇔展開式）: 選択したら現在値だけの1行表示へ畳む
+            // 属性（現在値⇔展開式）: 選択したら現在値ボタンへ畳む
             const wrap = document.createElement('div');
-            wrap.innerHTML = attrLineHtml(val, grid.dataset.tpl, grid.dataset.room === '1', grid.dataset.small === '1');
+            wrap.innerHTML = attrLineHtml(val, grid.dataset.tpl, grid.dataset.room === '1');
             grid.replaceWith(wrap.firstElementChild);
         } else {
             // 訪問結果（常時3択表示）: ハイライトを付け替えるだけ
@@ -1050,13 +1044,15 @@
 
     /* ── 住所の表示（街区内包方式で番地を判定）。手動指定(E列)があればそれを優先 ── */
     // 詳細ポップアップに入れる「住所」行。未指定の住所は吹き出し表示時に fillDerivedAddress で算出して埋める。
-    function addrRowHtml(item) {
+    // attrHtml: 戸建てで住所の右側に置く属性の現在値ボタン（集合住宅は未使用）
+    function addrRowHtml(item, attrHtml) {
         const stored = (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? item.住所 : '';
         const lng = parseFloat(item.経度), lat = parseFloat(item.緯度);
         const shown = stored || '判定中…';
         return `<div style="font-size:14px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
             + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}" style="cursor:pointer;" title="タップで番地を赤枠表示" onclick="outlineAddrForPin(${item.rowNumber})">${escHtml(shown)}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressFor(${item.rowNumber})">住所を指定</button>`
+            + (attrHtml || '')
             + `</div>`;
     }
     // 吹き出しの住所をタップ → 住所選択時と同じ赤枠（街区）を表示し、上部に住所ラベルを出す。
@@ -1103,11 +1099,12 @@
             if (el) el.textContent = addr;
         });
     }
-    // 新規登録フォームに入れる「住所」行
-    function newAddrRowHtml() {
+    // 新規登録フォームに入れる「住所」行。attrHtml: 戸建てで右側に置く属性の現在値ボタン
+    function newAddrRowHtml(attrHtml) {
         return `<div style="font-size:14px; color:#555; margin:-2px 0 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
             + `🏠 <span id="new-addr-text" style="cursor:pointer;" title="タップで番地を赤枠表示" onclick="outlineNewAddr()">${escHtml(newPinAddress || '（住所未指定）')}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressForNew()">住所を指定</button>`
+            + (attrHtml || '')
             + `</div>`;
     }
 
@@ -1460,9 +1457,8 @@
         if (forcedType === '戸建て') {
             formHtml += `
                 <div class="building-title">📍 戸建てを新規登録</div>
-                ${newAddrRowHtml()}
                 <input type="hidden" id="new-attribute-k" value="通常">
-                ${attrLineHtml('通常', "pickNewChoice('new-attribute-k','%v',this)", false, false)}
+                ${newAddrRowHtml(attrLineHtml('通常', "pickNewChoice('new-attribute-k','%v',this)", false))}
                 <input type="hidden" id="new-status" value="不在">
                 <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">訪問結果</div>
                 ${resultChoiceHtml('不在', "pickNewChoice('new-status','%v',this)")}
@@ -1933,8 +1929,7 @@
 
         return `
             <div class="building-title">${escHtml(item['建物名 / 世帯名'] || '戸建て')}</div>
-            ${addrRowHtml(item)}
-            ${attrLineHtml(attr, `saveAttribute(${item.rowNumber}, '%v')`, false, false)}
+            ${addrRowHtml(item, attrLineHtml(attr, `saveAttribute(${item.rowNumber}, '%v')`, false))}
             <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">訪問結果</div>
             ${resultChoiceHtml(item.最新ステータス, `saveStatus(${item.rowNumber}, '%v')`)}
             <div style="font-weight:bold; font-size:14px; margin-top:6px;">履歴欄</div>
@@ -2168,8 +2163,10 @@
 
         // レイアウトは戸建ての詳細と統一（見出し＋選択ボタン）。属性を上、訪問結果を下に。
         const html = `
-            <div style="font-weight:bold; margin-bottom:6px; font-size:12px;">${title}</div>
-            ${attrLineHtml(curRoomVal, `saveRoomState(${buildingRow}, ${roomNum}, '%v')`, true, true)}
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+                <span style="font-weight:bold; font-size:12px;">${title}</span>
+                ${attrLineHtml(curRoomVal, `saveRoomState(${buildingRow}, ${roomNum}, '%v')`, true)}
+            </div>
             <div style="font-weight:bold; font-size:12px; margin:2px 0 4px;">訪問結果</div>
             ${resultChoiceHtml(curRoomVal, `saveRoomStatus(${buildingRow}, ${roomNum}, '%v')`)}
             <div style="font-weight:bold; font-size:14px; margin-top:4px;">部屋の履歴:</div>
