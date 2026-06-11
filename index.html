@@ -333,7 +333,11 @@
 </div>
 
 <script>
-    /* Mapbox 公開トークン（pk.）。岡本様のトークンを設定済み。
+    /* =========================================================================
+     *  アプリ設定（環境・地域を変えるときは、まずこのブロックを書き換える）
+     *  ※ 番地データ（地区・丁目・番）の正は code_api.gs の AREA_DEF（このファイルではない）
+     * ========================================================================= */
+    /* Mapbox 公開トークン（pk.）。
        ※ このトークンはブラウザで地図タイル取得に使うため、閲覧者には必ず見える（クライアント側トークンは隠蔽不可）。
           別ファイル化・難読化・GAS経由にしても見えるので「隠す」対策は無意味。流用対策は Mapbox 側で行う：
             ① URL制限（URL restrictions）＝ 配信ドメインのみ許可【最重要】
@@ -342,14 +346,17 @@
           手順は 導入手順書.md「5. Mapbox」を参照。露出済みトークンは新規発行＋URL制限＋差し替え（ローテーション）を推奨。 */
     const MY_TOKEN = 'pk.eyJ1IjoidG9ydW8xMTA0IiwiYSI6ImNtcTdlOGp2MzBhY3QycXBocno2OHQ5dmoifQ.bfkHvR5OmkacGJsDorHL5Q';
     mapboxgl.accessToken = MY_TOKEN;
-
-    /* =========================================================================
-     *  外部API設定（GAS Webアプリと fetch で通信）
-     * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwjUuJLaB2d2DhJo1Z8A5GTLXxY1Ujkz5_BrPqYDvMWy4lCpZX0vFwZuEHD8DmkOHMk/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyUcL3WsTKv49YodpPLcMnJbZApd6RVrxUHHf6XwvhbHx_ELzcNP18NW2ILsYOf2eNr/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
+    // ↓ 地図スタイル（Mapbox Studio のスタイルURL。標準に戻す場合は 'mapbox://styles/mapbox/streets-v12'）
+    const MAP_STYLE = 'mapbox://styles/toruo1104/cmq7cda6y001g01sqf3aogpwy';
+    // ↓ 地図の初期表示位置（前回位置の保存が無い初回起動時に使う）。住所検索の優先中心も兼ねる
+    const MAP_HOME = { lng: 139.89036779018497, lat: 35.72063279470909, zoom: 16 };
+    // ↓ 住所検索のプレフィックス（区域ラベル「東小岩3丁目5番」等の前に付けてジオコーディングする）
+    const ADDR_PREFIX = '東京都江戸川区';
+    const AREA_PROXIMITY = MAP_HOME.lng + ',' + MAP_HOME.lat; // Mapboxフォールバック検索の優先中心
 
     let ID_TOKEN = ''; // 「Googleで続ける」で取得した署名付きIDトークン(JWT)
 
@@ -551,9 +558,9 @@
 
     const map = new mapboxgl.Map({
         container: 'map',
-        style: 'mapbox://styles/toruo1104/cmq7cda6y001g01sqf3aogpwy',
-        center: savedView ? [savedView.lng, savedView.lat] : [139.89036779018497, 35.72063279470909], // 前回位置 or 既定の中心
-        zoom: savedView ? savedView.zoom : 16,
+        style: MAP_STYLE,
+        center: savedView ? [savedView.lng, savedView.lat] : [MAP_HOME.lng, MAP_HOME.lat], // 前回位置 or 既定の中心
+        zoom: savedView ? savedView.zoom : MAP_HOME.zoom,
         bearingSnap: 18 // 北付近の小さな（意図しない）回転は指を離すと北に戻す＝誤回転を抑制
     });
     // 表示位置を保存（パン・ズーム・flyTo すべて moveend で拾う）
@@ -857,9 +864,11 @@
     }
 
     /* ── 住所で移動（地区→丁目→番地を選んで、そのエリアの中心へ移動） ──
-       「住所の一覧.txt」を元に作成。値は { 丁目: 最大番地 }（番地は1〜最大の連番）。
-       null は丁目を持たない地区（例：鹿骨町）。 */
-    const AREA_DATA = {
+       値は { 丁目: 最大番地 }（番地は1〜最大の連番）。null は丁目を持たない地区（例：鹿骨町）。
+       【番地のマスタは code_api.gs の AREA_DEF】ここは初回起動・通信失敗時のフォールバック。
+       サインイン時に getMe が最新を配布し、これを上書き＋localStorage(vm_areaDef) に保持する。
+       ※ 地区そのものを増減したときだけ、地区マップSVG(AREA_MAP_SVG)とこのフォールバックも手で合わせる。 */
+    let AREA_DATA = {
         '東小岩': { 1: 32, 2: 24, 3: 24, 4: 33 },
         '北篠崎': { 1: 9, 2: 28 },
         '南小岩': { 1: 15, 2: 23, 3: 29, 4: 18 },
@@ -873,6 +882,8 @@
         '上篠崎': { 1: 25, 2: 27, 3: 17, 4: 30 },
         '篠崎町': { 1: 44, 7: 31, 8: 15 }
     };
+    // 前回サインイン時に受け取った番地データ（マスタ由来）があれば、内蔵値より優先して復元する
+    try { const _ad = JSON.parse(localStorage.getItem('vm_areaDef') || 'null'); if (_ad) AREA_DATA = _ad; } catch (e) {}
     // 地区選択のSVGマップ（Geminiで江戸川区の地区図をトレース。座標は見た目重視で地理座標ではない）。
     // 各 path のクリックで selectArea('district', 地区名) を呼ぶ＝既存の丁目/番地ロジックをそのまま利用。
     const AREA_MAP_SVG = `<div class="area-map"><svg viewBox="0 0 905 1060" role="group" aria-label="地区マップ">
@@ -905,7 +916,6 @@
         <text class="lbl sm" data-name="谷河内" x="456" y="1006">谷河内</text>
       </g>
     </svg></div>`;
-    const AREA_PROXIMITY = '139.89036779018497,35.72063279470909'; // Mapboxフォールバック検索の優先中心
     let areaSel = { district: null, chome: null };
     let areaViewMode = localStorage.getItem('vm_areaView') || 'map'; // 'map'=地区図 / 'list'=一覧グリッド
     // 一覧グリッドの並び順（3列×4行で江戸川区の地図配置に近づけた）
@@ -1018,7 +1028,7 @@
     function selectAreaAssign(district, chome, banchi) {
         if (areaPickCallback) { selectArea('banchi', banchi); return; } // 手動「住所を指定」中は通常選択
         const label = district + chome + '丁目' + banchi + '番';
-        const query = '東京都江戸川区' + district + chome + '-' + banchi;
+        const query = ADDR_PREFIX + district + chome + '-' + banchi;
         closeAreaNav();
         geocodeAndFly(query, 18, true, label, assignAddressToPinsInBox);
     }
@@ -1030,7 +1040,7 @@
                 const cb = areaPickCallback;
                 closeAreaNav();
                 if (cb) cb(val);                      // 住所指定モード：住所を返す
-                else geocodeAndFly('東京都江戸川区' + val, 16, false, val); // 通常：移動
+                else geocodeAndFly(ADDR_PREFIX + val, 16, false, val); // 通常：移動
             } else {
                 renderAreaStep('chome');
             }
@@ -1045,7 +1055,7 @@
                 cb(label); // 住所指定モード：選んだ住所を返す（地図は動かさない）
             } else {
                 // 通常モード：その番地へ移動して街区を赤線で囲む
-                const query = '東京都江戸川区' + areaSel.district + areaSel.chome + '-' + val;
+                const query = ADDR_PREFIX + areaSel.district + areaSel.chome + '-' + val;
                 geocodeAndFly(query, 18, true, label);
             }
         }
@@ -1057,9 +1067,9 @@
         const m = area.match(/^(.+?)(\d+)丁目(\d+)番$/);
         if (m && AREA_DATA[m[1]]) {                              // 例「東小岩3丁目5番」：番地へズーム＋赤枠
             const label = m[1] + m[2] + '丁目' + m[3] + '番';
-            geocodeAndFly('東京都江戸川区' + m[1] + m[2] + '-' + m[3], 18, true, label);
+            geocodeAndFly(ADDR_PREFIX + m[1] + m[2] + '-' + m[3], 18, true, label);
         } else if (AREA_DATA.hasOwnProperty(area) && AREA_DATA[area] === null) {
-            geocodeAndFly('東京都江戸川区' + area, 16, false, area); // 鹿骨町（丁目なし）：地区へ移動
+            geocodeAndFly(ADDR_PREFIX + area, 16, false, area); // 鹿骨町（丁目なし）：地区へ移動
         } else {
             showToast('リンクの住所が見つかりませんでした', true);
         }
@@ -1920,7 +1930,12 @@
         apiCall('getMe', {}).then(me => {
             ME = me || ME;
             document.body.classList.toggle('is-admin', !!ME.isAdmin); // メニューの管理項目の出し分け
-        }).catch(() => { /* 取得失敗でも本体は動かす（メニューが一般表示になるだけ） */ });
+            // 番地データ（マスタ＝GASのAREA_DEF）を受け取り、フォールバックを上書きして保持する
+            if (me && me.areaDef) {
+                AREA_DATA = me.areaDef;
+                try { localStorage.setItem('vm_areaDef', JSON.stringify(me.areaDef)); } catch (e) {}
+            }
+        }).catch(() => { /* 取得失敗でも本体は動かす（メニューが一般表示・番地は内蔵値のまま） */ });
     }
     function toggleMenu() { document.getElementById('menu-panel').classList.toggle('show'); }
     function closeMenu() { document.getElementById('menu-panel').classList.remove('show'); }
@@ -1953,8 +1968,8 @@
     // 区域ラベルを地図に表示（「○○N丁目M番」は赤枠つき、丁目なし地区は移動のみ）
     function showAssignedArea(area) {
         const m = String(area).match(/^(.+?)(\d+)丁目(\d+)番$/);
-        if (m) geocodeAndFly('東京都江戸川区' + m[1] + m[2] + '-' + m[3], 18, true, area);
-        else geocodeAndFly('東京都江戸川区' + area, 16, false, area);
+        if (m) geocodeAndFly(ADDR_PREFIX + m[1] + m[2] + '-' + m[3], 18, true, area);
+        else geocodeAndFly(ADDR_PREFIX + area, 16, false, area);
     }
 
     // ── 割り当て区域（自分に貸出中の一覧。タップでその区域を表示） ──
