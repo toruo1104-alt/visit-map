@@ -140,6 +140,7 @@
         .lend-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px dashed #e3e3e3; }
         .lend-row .grow { flex: 1; min-width: 0; }
         .due-over { color: #C75F56; font-weight: bold; } /* 返却期日超過 */
+        .due-soon { color: #B0763C; font-weight: bold; } /* 期日まで2週間以内（落ち着いたアンバー） */
         #lend-preview-back { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 9999; background: #34495e; color: #fff; border: none; border-radius: 20px; padding: 11px 20px; font-size: 15px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.35); cursor: pointer; }
 
         /* ── 確認ダイアログ（ネイティブ confirm/alert の代替・独自UI） ── */
@@ -303,7 +304,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxQ7dyMZq919hNlnwF925nNJ6Ch8LwXSe6qZio082tW0K-dWPPITbs9D8bf8yfOWcXG/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzP6e6Z1I9U3gFg-vWYr5XFB4OyQVHnbxhKulmbBRmhnqhMeheIxXxfSpHMv_qK3WMH/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -1896,12 +1897,15 @@
         document.getElementById('app-modal').style.display = 'none';
         document.getElementById('lend-preview-back').style.display = 'none';
     }
-    function isOverdue(d) {
-        if (!d) return false;
+    // 返却期日の警告クラス。超過=赤(due-over)、2週間以内=アンバー(due-soon)、それ以外は無印
+    function dueClass(d) {
+        if (!d) return '';
         const t = new Date(String(d).replace(/-/g, '/'));
-        if (isNaN(t)) return false;
+        if (isNaN(t)) return '';
         const now = new Date(); now.setHours(0, 0, 0, 0);
-        return t < now;
+        if (t < now) return 'due-over';
+        if ((t - now) / 86400000 <= 14) return 'due-soon';
+        return '';
     }
     // 区域ラベルを地図に表示（「○○N丁目M番」は赤枠つき、丁目なし地区は移動のみ）
     function showAssignedArea(area) {
@@ -1919,7 +1923,7 @@
             body.innerHTML = list.map(a =>
                 `<div class="lend-row" style="cursor:pointer;" onclick="closeAppModal(); showAssignedArea('${escHtml(a.area)}')">`
                 + `<div class="grow"><b style="font-size:16px;">${escHtml(a.area)}</b>${a.count !== '' && a.count != null ? `<span style="color:#888; font-size:12px;">（${a.count}件）</span>` : ''}<br>`
-                + `<span style="color:#666; font-size:12px;">貸出: ${escHtml(a.lendDate || '-')} ／ 返却期日: <span class="${isOverdue(a.dueDate) ? 'due-over' : ''}">${escHtml(a.dueDate || '-')}</span></span></div>`
+                + `<span style="color:#666; font-size:12px;">貸出: ${escHtml(a.lendDate || '-')} ／ 返却期日: <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
                 + `<span style="color:#5E9DB8; font-weight:bold;">▶</span></div>`
             ).join('');
         }).catch(handleServerError);
@@ -1942,7 +1946,7 @@
         renderLendScreen();
     }
     function lendDefaultDue() {
-        const d = new Date(); d.setDate(d.getDate() + 14); // 既定の返却期日は2週間後（変更可）
+        const d = new Date(); d.setMonth(d.getMonth() + 4); // 既定の返却期日は4ヶ月後（変更可）
         return d.toISOString().slice(0, 10);
     }
     function renderLendScreen() {
@@ -1975,11 +1979,13 @@
             + `<select style="flex:1.3; min-width:0;" onchange="lendSel('areaId', this.value)" ${!areaOpts.length ? 'disabled' : ''}><option value="">番地</option>${areaOpts.map(a => { const num = noChome ? a.area : a.area.replace(/^.*丁目/, ''); return opt(a.id, num + (a.user ? ' ●貸出中' : ''), s.areaId); }).join('')}</select>`
             + '</div>';
         if (selArea) {
+            // 貸出中=何回目かと現状、未貸出=最終返却日とこれまでの回数（「空き」とは表示しない）
+            const histInfo = selArea.user
+                ? `<span style="color:#C75F56;">貸出中（${selArea.lendCount || 1}回目）: ${escHtml(selArea.name || uname(selArea.user))}（${escHtml(selArea.lendDate || '-')} → ${escHtml(selArea.dueDate || '-')}）</span>`
+                : `<span style="color:#555;">最終返却日: ${escHtml(selArea.lastReturn || 'なし')}　これまで ${selArea.lendCount || 0} 回</span>`;
             html += `<div style="background:#f0f7f9; border:1px solid #cfe3ec; border-radius:6px; padding:8px; margin-bottom:8px;">`
                 + `<b>${escHtml(selArea.area)}</b>（件数: ${selArea.count === '' || selArea.count == null ? '-' : selArea.count}）<br>`
-                + (selArea.user
-                    ? `<span style="color:#C75F56;">貸出中: ${escHtml(uname(selArea.user))}（${escHtml(selArea.lendDate || '-')} → ${escHtml(selArea.dueDate || '-')}）</span>`
-                    : '<span style="color:#3E8E54; font-weight:bold;">空き</span>')
+                + histInfo
                 + '</div>'
                 + `<div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;"><label style="font-size:13px; font-weight:bold; flex-shrink:0;">返却期日</label><input type="date" id="lend-due" value="${lendDefaultDue()}" style="flex:1; min-width:0;"></div>`
                 + '<div style="display:flex; gap:8px; margin-bottom:12px;">'
@@ -1991,7 +1997,7 @@
         html += `<div style="font-weight:bold; border-top:1px solid #ddd; padding-top:8px;">貸出中の区域（${lent.length}）</div>`;
         html += lent.length ? lent.map(a =>
             `<div class="lend-row"><div class="grow"><b>${escHtml(a.area)}</b><br>`
-            + `<span style="font-size:12px; color:#666;">${escHtml(uname(a.user))} ／ ${escHtml(a.lendDate || '-')} → <span class="${isOverdue(a.dueDate) ? 'due-over' : ''}">${escHtml(a.dueDate || '-')}</span></span></div>`
+            + `<span style="font-size:12px; color:#666;">${escHtml(a.name || uname(a.user))} ／ ${escHtml(a.lendDate || '-')} → <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
             + `<button class="clear-btn" onclick="doReturnArea(${a.id}, '${escHtml(a.area)}')">返却</button></div>`
         ).join('') : '<div style="color:#888; padding:6px;">ありません</div>';
         body.innerHTML = html;
@@ -2018,7 +2024,12 @@
             if (!ok) return;
             showBusy('貸出中…');
             apiCall('lendArea', { areaId: a.id, targetEmail: u.email, dueDate: due ? due.replace(/-/g, '/') : '' })
-                .then(d => { lendState.users = d.users; lendState.areas = d.areas; renderLendScreen(); showToast('貸し出しました', false); })
+                .then(d => {
+                    lendState.users = d.users; lendState.areas = d.areas;
+                    lendState.sel = { group: '', email: '', district: '', chome: '', areaId: '' }; // 次の貸出に備えて入力をクリア
+                    renderLendScreen();
+                    showToast('貸し出しました', false);
+                })
                 .catch(handleServerError).finally(hideBusy);
         });
     }
