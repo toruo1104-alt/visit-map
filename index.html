@@ -111,6 +111,9 @@
         .choice-grid.c3 { grid-template-columns: repeat(3, 1fr); }
         .choice-btn { padding: 9px 2px; border-radius: 6px; font-size: 13px; font-weight: bold; text-align: center; cursor: pointer; border: 1.5px solid #c8cfd6; background: #fff; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
         body.large-ui .choice-btn { font-size: 15px !important; padding: 11px 2px !important; }
+        /* 属性の1行表示（ラベル＋現在値ボタンのみ。タップで4択に展開） */
+        .attr-line { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; }
+        .attr-line .choice-btn { min-width: 7.5em; padding: 7px 12px; }
 
         /* ── 処理中インジケーター（サーバー通信中に表示） ── */
         /* 更新中の操作ブロック用オーバーレイ（クリックを吸収して操作不可にする） */
@@ -217,6 +220,7 @@
 <div id="legend-panel">
     <div style="font-weight:bold; margin-bottom:6px; font-size:12px;">🗺 凡例</div>
     <div style="font-weight:bold; font-size:10px; color:#666; margin-bottom:2px;">── 戸建てマーカー ──</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#6FAEC0; border-radius:50%;">未</span>未訪問</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#333; border-radius:50%;">1</span>不在(1回目)</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#4A78B0; border-radius:50%;">2</span>不在(2回目)</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#333; border-radius:50%;">3</span>不在(3回目)</div>
@@ -226,7 +230,7 @@
     <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; color:#fff; clip-path:polygon(50% 2%,61% 35%,96% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,4% 35%,39% 35%);">外</span>外国語（☆・属性）</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#8C8C8C; border-radius:50%;">空</span>空き家/空き地（属性）</div>
     <div style="font-weight:bold; font-size:10px; color:#666; margin:6px 0 2px;">── 集合住宅ピン（構成属性）──</div>
-    <div class="legend-row"><span class="legend-chip" style="background:#D98E5B; border-radius:4px;"></span>ファミリー</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#F2E394; border:1px solid #ccc; border-radius:4px;"></span>ファミリー</div>
     <div class="legend-row"><span class="legend-chip" style="background:#5B8BB0; border-radius:4px;"></span>シングル</div>
     <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; border-radius:4px;"></span>混在</div>
     <div class="legend-row"><span class="legend-chip" style="background:#6FAEC0; border-radius:4px;"></span>不明</div>
@@ -256,7 +260,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzFQoP-vwtkdljUc5XLhwLxu-V3Nz15-Bl-99SUWzlndojqqCJkXBBjIsxusSm-PocQ/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxcLXPcslsNwnK44BXkp_E8mME8yLSVFd4FA51iqddwa9ym-H-RPoaOjbswC3yVUY6l/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -506,7 +510,7 @@
     // 集合住宅ピンの色（構成属性で見分ける／落ち着いたトーン）
     function shugaColor(attr) {
         switch (attr) {
-            case 'ファミリー': return '#D98E5B'; // オレンジ（落ち着いたテラコッタ）
+            case 'ファミリー': return '#F2E394'; // 薄黄
             case 'シングル':   return '#5B8BB0'; // ブルー（くすみ）
             case '混在':       return '#8E79AB'; // パープル（くすみ）
             default:           return '#6FAEC0'; // 不明など（既定・くすみティール）
@@ -596,8 +600,8 @@
     /* ── 集合住宅ピンのアイコン（SVG・白シルエット。窓は背景色＝構成属性の色が抜ける） ──
        アパート＝低層横長（庇・窓4・中央玄関）/ マンション＝高層縦長（塔屋・窓3列・エントランス）。
        マンションは縦長で細く見えるため、ピンに対する占有率を大きめにしてバランスを取る。 */
-    const ICON_APART = '<svg viewBox="0 0 24 24" style="width:58%;height:58%;fill:#fff;display:block;" aria-hidden="true"><path fill-rule="evenodd" d="M1.5 4.5 h21 v2.5 h-21 Z M3 7 h18 v14 h-18 Z M5.6 9.3 h3.2 v3 h-3.2 Z M15.2 9.3 h3.2 v3 h-3.2 Z M5.6 14.8 h3.2 v3 h-3.2 Z M15.2 14.8 h3.2 v3 h-3.2 Z M10.4 15 h3.2 v6 h-3.2 Z"/></svg>';
-    const ICON_MANSION = '<svg viewBox="0 0 24 24" style="width:76%;height:76%;fill:#fff;display:block;" aria-hidden="true"><path fill-rule="evenodd" d="M9 1.5 h6 v2.5 h-6 Z M5 4 h14 v17 h-14 Z M7 6 h2.2 v2.2 H7 Z M10.9 6 h2.2 v2.2 h-2.2 Z M14.8 6 h2.2 v2.2 h-2.2 Z M7 9.4 h2.2 v2.2 H7 Z M10.9 9.4 h2.2 v2.2 h-2.2 Z M14.8 9.4 h2.2 v2.2 h-2.2 Z M7 12.8 h2.2 v2.2 H7 Z M10.9 12.8 h2.2 v2.2 h-2.2 Z M14.8 12.8 h2.2 v2.2 h-2.2 Z M7 16.2 h2.2 v2.2 H7 Z M14.8 16.2 h2.2 v2.2 h-2.2 Z M10.7 16.4 h2.6 v4.6 h-2.6 Z"/></svg>';
+    const ICON_APART = '<svg viewBox="0 0 24 24" style="width:58%;height:58%;fill:currentColor;display:block;" aria-hidden="true"><path fill-rule="evenodd" d="M1.5 4.5 h21 v2.5 h-21 Z M3 7 h18 v14 h-18 Z M5.6 9.3 h3.2 v3 h-3.2 Z M15.2 9.3 h3.2 v3 h-3.2 Z M5.6 14.8 h3.2 v3 h-3.2 Z M15.2 14.8 h3.2 v3 h-3.2 Z M10.4 15 h3.2 v6 h-3.2 Z"/></svg>';
+    const ICON_MANSION = '<svg viewBox="0 0 24 24" style="width:76%;height:76%;fill:currentColor;display:block;" aria-hidden="true"><path fill-rule="evenodd" d="M9 1.5 h6 v2.5 h-6 Z M5 4 h14 v17 h-14 Z M7 6 h2.2 v2.2 H7 Z M10.9 6 h2.2 v2.2 h-2.2 Z M14.8 6 h2.2 v2.2 h-2.2 Z M7 9.4 h2.2 v2.2 H7 Z M10.9 9.4 h2.2 v2.2 h-2.2 Z M14.8 9.4 h2.2 v2.2 h-2.2 Z M7 12.8 h2.2 v2.2 H7 Z M10.9 12.8 h2.2 v2.2 h-2.2 Z M14.8 12.8 h2.2 v2.2 h-2.2 Z M7 16.2 h2.2 v2.2 H7 Z M14.8 16.2 h2.2 v2.2 h-2.2 Z M10.7 16.4 h2.6 v4.6 h-2.6 Z"/></svg>';
 
     /* ── 属性・訪問結果の選択UI（ネイティブselectの代替・ボタン式） ──
        視認性向上のため選択肢を最初からボタンで並べ、現在値を凡例と同系色でハイライトする。
@@ -638,13 +642,44 @@
             return choiceBtnHtml(c.label, onStyle, offStyle, on, onclickTpl.replace('%v', c.v));
         }).join('') + '</div>';
     }
-    // 新規フォーム用：タップで hidden input に値を入れ、ボタンのハイライトを付け替える
+    // 属性の1行表示（ラベル＋現在値ボタンのみ）。普段は現在値だけを見せ、タップで4択に展開する。
+    function attrLineHtml(current, onclickTpl, useRoomV, small) {
+        const isAttr = ['訪問拒否', '外国語', '空き家'].indexOf(current) >= 0;
+        const cur = (isAttr && ATTR_CHOICES.find(c => (useRoomV ? c.roomV : c.v) === current)) || ATTR_CHOICES[0];
+        const fs = small ? '12px' : '14px';
+        return `<div class="attr-line" data-cur="${current || ''}" data-tpl="${onclickTpl}" data-room="${useRoomV ? 1 : 0}" data-small="${small ? 1 : 0}">`
+            + `<span style="font-weight:bold; font-size:${fs};">属性</span>`
+            + `<button class="choice-btn" style="background:${cur.on}; border-color:${cur.on}; color:#fff;" onclick="expandAttrChoices(this)">${cur.label} ▾</button>`
+            + `</div>`;
+    }
+    // 1行表示をタップ → 4択ボタンに展開（選択すると即保存→再描画、新規は pickNewChoice が1行へ畳む）
+    function expandAttrChoices(btn) {
+        const line = btn.closest('.attr-line');
+        if (!line) return;
+        const wrap = document.createElement('div');
+        wrap.innerHTML = attrChoiceHtml(line.dataset.cur, line.dataset.tpl, line.dataset.room === '1');
+        const grid = wrap.firstElementChild;
+        grid.dataset.tpl = line.dataset.tpl;     // 新規フォーム用：選択後に1行へ畳むための情報を引き継ぐ
+        grid.dataset.room = line.dataset.room;
+        grid.dataset.small = line.dataset.small;
+        line.replaceWith(grid);
+    }
+    // 新規フォーム用：タップで hidden input に値を入れ、表示を更新する
     function pickNewChoice(inputId, val, btn) {
         const input = document.getElementById(inputId);
         if (input) input.value = val;
         const grid = btn.closest('.choice-grid');
-        if (grid) grid.querySelectorAll('.choice-btn').forEach(b => b.setAttribute('style', b.getAttribute('data-off')));
-        btn.setAttribute('style', btn.getAttribute('data-on'));
+        if (!grid) return;
+        if (grid.dataset.tpl) {
+            // 属性（1行⇔展開式）: 選択したら現在値だけの1行表示へ畳む
+            const wrap = document.createElement('div');
+            wrap.innerHTML = attrLineHtml(val, grid.dataset.tpl, grid.dataset.room === '1', grid.dataset.small === '1');
+            grid.replaceWith(wrap.firstElementChild);
+        } else {
+            // 訪問結果（常時3択表示）: ハイライトを付け替えるだけ
+            grid.querySelectorAll('.choice-btn').forEach(b => b.setAttribute('style', b.getAttribute('data-off')));
+            btn.setAttribute('style', btn.getAttribute('data-on'));
+        }
     }
 
     // 広域表示（ズームがこの値未満）のときは戸建てを隠す
@@ -1257,7 +1292,7 @@
         if (s === '訪問拒否')    return { char: '拒', color: '#B0554D', star: true };
         if (s === '外国語')      return { char: '外', color: '#8E79AB', star: true };
         if (s === '空き家')      return { char: '空', color: '#8C8C8C' };
-        return { char: '📍', color: '#6FAEC0' }; // 未訪問
+        return { char: '未', color: '#6FAEC0' }; // 未訪問（新規未操作・履歴クリア後）
     }
 
     // 戸建てマーカー要素に見た目（文字・色・☆形）を適用する。新規描画とその場更新の両方で使う。
@@ -1427,8 +1462,7 @@
                 <div class="building-title">📍 戸建てを新規登録</div>
                 ${newAddrRowHtml()}
                 <input type="hidden" id="new-attribute-k" value="通常">
-                <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">属性</div>
-                ${attrChoiceHtml('通常', "pickNewChoice('new-attribute-k','%v',this)", false)}
+                ${attrLineHtml('通常', "pickNewChoice('new-attribute-k','%v',this)", false, false)}
                 <input type="hidden" id="new-status" value="不在">
                 <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">訪問結果</div>
                 ${resultChoiceHtml('不在', "pickNewChoice('new-status','%v',this)")}
@@ -1834,6 +1868,8 @@
                 markerEl.innerHTML = units > 12 ? ICON_MANSION : ICON_APART;
                 // 背景＝構成属性（ファミリー/シングル等）で色分け
                 markerEl.style.background = shugaColor(firstItem.属性);
+                // 薄黄(ファミリー)背景では白シルエットが見えないため、濃い黄土色に切り替える
+                markerEl.style.color = (firstItem.属性 === 'ファミリー') ? '#8a7117' : '#fff';
                 // 枠＝オートロック（あり=くすみブリック / なし=くすみブルー）
                 markerEl.style.border = '3px solid ' + (getAutolock(firstItem) === 'あり' ? '#A8554E' : '#3E8E54');
                 popupHtml += createShugaViewHtml(items);
@@ -1898,8 +1934,7 @@
         return `
             <div class="building-title">${escHtml(item['建物名 / 世帯名'] || '戸建て')}</div>
             ${addrRowHtml(item)}
-            <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">属性</div>
-            ${attrChoiceHtml(attr, `saveAttribute(${item.rowNumber}, '%v')`, false)}
+            ${attrLineHtml(attr, `saveAttribute(${item.rowNumber}, '%v')`, false, false)}
             <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">訪問結果</div>
             ${resultChoiceHtml(item.最新ステータス, `saveStatus(${item.rowNumber}, '%v')`)}
             <div style="font-weight:bold; font-size:14px; margin-top:6px;">履歴欄</div>
@@ -2134,8 +2169,7 @@
         // レイアウトは戸建ての詳細と統一（見出し＋選択ボタン）。属性を上、訪問結果を下に。
         const html = `
             <div style="font-weight:bold; margin-bottom:6px; font-size:12px;">${title}</div>
-            <div style="font-weight:bold; font-size:12px; margin:2px 0 4px;">属性</div>
-            ${attrChoiceHtml(curRoomVal, `saveRoomState(${buildingRow}, ${roomNum}, '%v')`, true)}
+            ${attrLineHtml(curRoomVal, `saveRoomState(${buildingRow}, ${roomNum}, '%v')`, true, true)}
             <div style="font-weight:bold; font-size:12px; margin:2px 0 4px;">訪問結果</div>
             ${resultChoiceHtml(curRoomVal, `saveRoomStatus(${buildingRow}, ${roomNum}, '%v')`)}
             <div style="font-weight:bold; font-size:14px; margin-top:4px;">部屋の履歴:</div>
