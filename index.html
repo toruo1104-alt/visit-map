@@ -123,6 +123,25 @@
         #busy-indicator .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: busy-spin 0.7s linear infinite; }
         @keyframes busy-spin { to { transform: rotate(360deg); } }
 
+        /* ── メニューパネル・汎用モーダル（割り当て区域／貸出／ユーザー管理） ── */
+        #menu-panel { position: absolute; bottom: 42px; left: 10px; z-index: 9999; background: rgba(255,255,255,0.98); border: 1px solid #ccc; border-radius: 8px; padding: 6px; display: none; box-shadow: 0 2px 8px rgba(0,0,0,0.25); min-width: 200px; }
+        #menu-panel.show { display: block; }
+        .menu-item { display: block; width: 100%; text-align: left; background: none; border: none; padding: 11px 12px; font-size: 15px; cursor: pointer; border-radius: 6px; }
+        .menu-item:active { background: #eef3f6; }
+        .menu-item.admin-only { display: none; }            /* 管理項目は admin のみ表示 */
+        body.is-admin .menu-item.admin-only { display: block; }
+        #app-modal { position: absolute; inset: 0; z-index: 10003; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; padding: 16px; touch-action: pan-x pan-y; }
+        #app-modal-card { background: #fff; border-radius: 10px; width: min(430px, 94vw); max-height: 84vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        #app-modal-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #eee; }
+        #app-modal-title { flex: 1; font-weight: bold; font-size: 15px; }
+        #app-modal-head button { min-width: 48px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; font-size: 13px; cursor: pointer; }
+        #app-modal-body { padding: 12px; overflow-y: auto; font-size: 14px; }
+        #app-modal-body select, #app-modal-body input { box-sizing: border-box; padding: 8px; font-size: 15px; border: 1px solid #bbb; border-radius: 6px; }
+        .lend-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px dashed #e3e3e3; }
+        .lend-row .grow { flex: 1; min-width: 0; }
+        .due-over { color: #C75F56; font-weight: bold; } /* 返却期日超過 */
+        #lend-preview-back { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 9999; background: #34495e; color: #fff; border: none; border-radius: 20px; padding: 11px 20px; font-size: 15px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.35); cursor: pointer; }
+
         /* ── 確認ダイアログ（ネイティブ confirm/alert の代替・独自UI） ── */
         #app-confirm-overlay { position: absolute; inset: 0; z-index: 10005; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; padding: 20px; }
         #app-confirm-card { background: #fff; border-radius: 12px; width: min(340px, 92vw); box-shadow: 0 6px 24px rgba(0,0,0,0.35); padding: 18px 16px 14px; }
@@ -197,7 +216,29 @@
 </div>
 
 <button id="scale-btn"  onclick="toggleScale()"  style="display:none;">アイコン：標準</button>
-<button id="signout-btn" onclick="signOut()"   style="display:none;">サインアウト</button>
+<button id="signout-btn" onclick="toggleMenu()" style="display:none;">☰ メニュー</button>
+
+<!-- メニューパネル（割り当て区域／管理機能／サインアウト。管理項目は admin のみ表示） -->
+<div id="menu-panel">
+    <button class="menu-item" onclick="closeMenu(); showMyAreas();">📋 割り当て区域</button>
+    <button class="menu-item admin-only" onclick="closeMenu(); showLendScreen();">🗂 区域の貸出・返却</button>
+    <button class="menu-item admin-only" onclick="closeMenu(); showUserAdmin();">👥 ユーザー管理</button>
+    <button class="menu-item" onclick="closeMenu(); signOut();">🚪 サインアウト</button>
+</div>
+
+<!-- 汎用モーダル（割り当て区域一覧・貸出画面・ユーザー管理で共用） -->
+<div id="app-modal" onclick="if(event.target===this)closeAppModal()">
+    <div id="app-modal-card">
+        <div id="app-modal-head">
+            <span id="app-modal-title"></span>
+            <button onclick="closeAppModal()">✕</button>
+        </div>
+        <div id="app-modal-body"></div>
+    </div>
+</div>
+
+<!-- 貸出プレビュー中の「戻る」ボタン（地図確認から貸出画面へ復帰） -->
+<button id="lend-preview-back" style="display:none;" onclick="backToLendScreen()">↩ 貸出画面に戻る</button>
 <button id="legend-btn"  onclick="toggleLegend()" style="display:none;">凡例</button>
 <button id="area-nav-btn" onclick="openAreaNav()" style="display:none;">🔍住所</button>
 
@@ -262,7 +303,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzqys65rewGql7WB4BqI3a3DDjV6MEnRdvjNP-w8Bsx8vZkrmCTLHITwTX9UWw1sDgB/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxQ7dyMZq919hNlnwF925nNJ6Ch8LwXSe6qZio082tW0K-dWPPITbs9D8bf8yfOWcXG/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -318,6 +359,7 @@
         document.getElementById('area-nav-btn').style.display = '';
         document.getElementById('scale-btn').style.display = '';
         updateScaleBtnText();
+        loadMe(); // 自分の権限・グループを取得（メニューの管理項目の出し分け）
         const blocksReady = loadBlocks(); // 街区ポリゴン(blocks.geojson)を先読み
         loadAddrPoints();  // 番地代表点(address_points.json)を先読み（住所の逆算用）
         loadDataFromSheet();
@@ -404,6 +446,10 @@
         document.getElementById('legend-btn').style.display = 'none';
         document.getElementById('area-nav-btn').style.display = 'none';
         document.getElementById('legend-panel').classList.remove('show');
+        closeMenu();
+        closeAppModal();
+        document.body.classList.remove('is-admin');
+        ME = { email: '', name: '', group: '', isAdmin: false };
         closeAreaNav();
         clearBanchiBox();
         document.getElementById('area-label').style.display = 'none';
@@ -1819,6 +1865,212 @@
     }
     function appAlert(msg) {
         return appConfirm(msg, { okLabel: 'OK', alertMode: true });
+    }
+
+    /* =========================================================================
+     *  メニュー／割り当て区域／管理画面（区域の貸出・返却、ユーザー管理）
+     *  データは UserList / AreaList / LendLog（GAS側 getMe ほか）を参照。
+     * ========================================================================= */
+    let ME = { email: '', name: '', group: '', isAdmin: false };
+    function loadMe() {
+        apiCall('getMe', {}).then(me => {
+            ME = me || ME;
+            document.body.classList.toggle('is-admin', !!ME.isAdmin); // メニューの管理項目の出し分け
+        }).catch(() => { /* 取得失敗でも本体は動かす（メニューが一般表示になるだけ） */ });
+    }
+    function toggleMenu() { document.getElementById('menu-panel').classList.toggle('show'); }
+    function closeMenu() { document.getElementById('menu-panel').classList.remove('show'); }
+    // メニュー外タップで閉じる（凡例パネルと同じ流儀）
+    document.addEventListener('click', (e) => {
+        const p = document.getElementById('menu-panel');
+        const b = document.getElementById('signout-btn');
+        if (p.classList.contains('show') && !p.contains(e.target) && e.target !== b) p.classList.remove('show');
+    });
+
+    function openAppModal(title) {
+        document.getElementById('app-modal-title').textContent = title;
+        document.getElementById('app-modal-body').innerHTML = '<div style="color:#888; padding:8px;">読み込み中…</div>';
+        document.getElementById('app-modal').style.display = 'flex';
+    }
+    function closeAppModal() {
+        document.getElementById('app-modal').style.display = 'none';
+        document.getElementById('lend-preview-back').style.display = 'none';
+    }
+    function isOverdue(d) {
+        if (!d) return false;
+        const t = new Date(String(d).replace(/-/g, '/'));
+        if (isNaN(t)) return false;
+        const now = new Date(); now.setHours(0, 0, 0, 0);
+        return t < now;
+    }
+    // 区域ラベルを地図に表示（「○○N丁目M番」は赤枠つき、丁目なし地区は移動のみ）
+    function showAssignedArea(area) {
+        const m = String(area).match(/^(.+?)(\d+)丁目(\d+)番$/);
+        if (m) geocodeAndFly('東京都江戸川区' + m[1] + m[2] + '-' + m[3], 18, true, area);
+        else geocodeAndFly('東京都江戸川区' + area, 16, false, area);
+    }
+
+    // ── 割り当て区域（自分に貸出中の一覧。タップでその区域を表示） ──
+    function showMyAreas() {
+        openAppModal('📋 割り当て区域');
+        apiCall('getMyAreas', {}).then(list => {
+            const body = document.getElementById('app-modal-body');
+            if (!list || !list.length) { body.innerHTML = '<div style="color:#888; padding:8px;">現在割り当てられている区域はありません。</div>'; return; }
+            body.innerHTML = list.map(a =>
+                `<div class="lend-row" style="cursor:pointer;" onclick="closeAppModal(); showAssignedArea('${escHtml(a.area)}')">`
+                + `<div class="grow"><b style="font-size:16px;">${escHtml(a.area)}</b>${a.count !== '' && a.count != null ? `<span style="color:#888; font-size:12px;">（${a.count}件）</span>` : ''}<br>`
+                + `<span style="color:#666; font-size:12px;">貸出: ${escHtml(a.lendDate || '-')} ／ 返却期日: <span class="${isOverdue(a.dueDate) ? 'due-over' : ''}">${escHtml(a.dueDate || '-')}</span></span></div>`
+                + `<span style="color:#5E9DB8; font-weight:bold;">▶</span></div>`
+            ).join('');
+        }).catch(handleServerError);
+    }
+
+    // ── 管理: 区域の貸出・返却 ──
+    let lendState = { users: [], areas: [], sel: { group: '', email: '', district: '', chome: '', areaId: '' } };
+    function showLendScreen() {
+        openAppModal('🗂 区域の貸出・返却');
+        apiCall('getLendData', {}).then(d => {
+            lendState.users = d.users || [];
+            lendState.areas = d.areas || [];
+            renderLendScreen();
+        }).catch(handleServerError);
+    }
+    function lendSel(k, v) {
+        lendState.sel[k] = v;
+        if (k === 'district') { lendState.sel.chome = ''; lendState.sel.areaId = ''; }
+        if (k === 'chome') lendState.sel.areaId = '';
+        renderLendScreen();
+    }
+    function lendDefaultDue() {
+        const d = new Date(); d.setDate(d.getDate() + 14); // 既定の返却期日は2週間後（変更可）
+        return d.toISOString().slice(0, 10);
+    }
+    function renderLendScreen() {
+        const s = lendState.sel;
+        const body = document.getElementById('app-modal-body');
+        const opt = (v, l, cur) => `<option value="${escHtml(String(v))}" ${String(cur) === String(v) ? 'selected' : ''}>${escHtml(String(l))}</option>`;
+        const groups = Array.from(new Set(lendState.users.map(u => u.group).filter(Boolean)));
+        const users = lendState.users.filter(u => !s.group || u.group === s.group);
+        if (s.email && !users.some(u => u.email === s.email)) s.email = '';
+        const noChome = s.district && AREA_DATA[s.district] === null;
+        const chomes = (s.district && !noChome) ? Object.keys(AREA_DATA[s.district]) : [];
+        let areaOpts = [];
+        if (noChome) areaOpts = lendState.areas.filter(a => a.area === s.district);
+        else if (s.district && s.chome) {
+            const p = s.district + s.chome + '丁目';
+            areaOpts = lendState.areas.filter(a => a.area.indexOf(p) === 0);
+        }
+        const selArea = lendState.areas.find(a => String(a.id) === String(s.areaId));
+        const uname = (em) => { const u = lendState.users.find(x => x.email === em); return u ? (u.name || u.email) : em; };
+
+        let html = '<div style="font-weight:bold; margin-bottom:4px;">借りる人</div>'
+            + '<div style="display:flex; gap:6px; margin-bottom:10px;">'
+            + `<select style="flex:1; min-width:0;" onchange="lendSel('group', this.value)"><option value="">全グループ</option>${groups.map(g => opt(g, g, s.group)).join('')}</select>`
+            + `<select style="flex:2; min-width:0;" onchange="lendSel('email', this.value)"><option value="">-- ユーザー選択 --</option>${users.map(u => opt(u.email, (u.name || u.email) + (u.group ? '（' + u.group + '）' : ''), s.email)).join('')}</select>`
+            + '</div>'
+            + '<div style="font-weight:bold; margin-bottom:4px;">区域</div>'
+            + '<div style="display:flex; gap:6px; margin-bottom:8px;">'
+            + `<select style="flex:1; min-width:0;" onchange="lendSel('district', this.value)"><option value="">地区</option>${Object.keys(AREA_DATA).map(d => opt(d, d, s.district)).join('')}</select>`
+            + `<select style="flex:1; min-width:0;" onchange="lendSel('chome', this.value)" ${(!s.district || noChome) ? 'disabled' : ''}><option value="">丁目</option>${chomes.map(c => opt(c, c + '丁目', s.chome)).join('')}</select>`
+            + `<select style="flex:1.3; min-width:0;" onchange="lendSel('areaId', this.value)" ${!areaOpts.length ? 'disabled' : ''}><option value="">番地</option>${areaOpts.map(a => { const num = noChome ? a.area : a.area.replace(/^.*丁目/, ''); return opt(a.id, num + (a.user ? ' ●貸出中' : ''), s.areaId); }).join('')}</select>`
+            + '</div>';
+        if (selArea) {
+            html += `<div style="background:#f0f7f9; border:1px solid #cfe3ec; border-radius:6px; padding:8px; margin-bottom:8px;">`
+                + `<b>${escHtml(selArea.area)}</b>（件数: ${selArea.count === '' || selArea.count == null ? '-' : selArea.count}）<br>`
+                + (selArea.user
+                    ? `<span style="color:#C75F56;">貸出中: ${escHtml(uname(selArea.user))}（${escHtml(selArea.lendDate || '-')} → ${escHtml(selArea.dueDate || '-')}）</span>`
+                    : '<span style="color:#3E8E54; font-weight:bold;">空き</span>')
+                + '</div>'
+                + `<div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;"><label style="font-size:13px; font-weight:bold; flex-shrink:0;">返却期日</label><input type="date" id="lend-due" value="${lendDefaultDue()}" style="flex:1; min-width:0;"></div>`
+                + '<div style="display:flex; gap:8px; margin-bottom:12px;">'
+                + `<button class="choice-btn" style="flex:1; background:#eef3f6;" onclick="previewLendArea()">🗺 プレビュー</button>`
+                + `<button class="choice-btn" style="flex:1; background:#5E9DB8; border-color:#5E9DB8; color:#fff;" onclick="doLendArea()" ${(selArea.user || !s.email) ? 'disabled style="flex:1; opacity:0.5;"' : ''}>貸出する</button>`
+                + '</div>';
+        }
+        const lent = lendState.areas.filter(a => a.user);
+        html += `<div style="font-weight:bold; border-top:1px solid #ddd; padding-top:8px;">貸出中の区域（${lent.length}）</div>`;
+        html += lent.length ? lent.map(a =>
+            `<div class="lend-row"><div class="grow"><b>${escHtml(a.area)}</b><br>`
+            + `<span style="font-size:12px; color:#666;">${escHtml(uname(a.user))} ／ ${escHtml(a.lendDate || '-')} → <span class="${isOverdue(a.dueDate) ? 'due-over' : ''}">${escHtml(a.dueDate || '-')}</span></span></div>`
+            + `<button class="clear-btn" onclick="doReturnArea(${a.id}, '${escHtml(a.area)}')">返却</button></div>`
+        ).join('') : '<div style="color:#888; padding:6px;">ありません</div>';
+        body.innerHTML = html;
+    }
+    // プレビュー: モーダルを一旦隠して地図で区域を確認 →「戻る」で選択状態のまま貸出画面へ
+    function previewLendArea() {
+        const a = lendState.areas.find(x => String(x.id) === String(lendState.sel.areaId));
+        if (!a) return;
+        document.getElementById('app-modal').style.display = 'none';
+        document.getElementById('lend-preview-back').style.display = '';
+        showAssignedArea(a.area);
+    }
+    function backToLendScreen() {
+        document.getElementById('lend-preview-back').style.display = 'none';
+        document.getElementById('app-modal').style.display = 'flex'; // 選択状態は lendState に保持されている
+    }
+    function doLendArea() {
+        const s = lendState.sel;
+        const a = lendState.areas.find(x => String(x.id) === String(s.areaId));
+        const u = lendState.users.find(x => x.email === s.email);
+        if (!a || !u) return;
+        const due = (document.getElementById('lend-due') || {}).value || '';
+        appConfirm(`「${a.area}」を\n${u.name || u.email} さんに貸し出します。\n返却期日: ${due || '未設定'}`, { okLabel: '貸出する' }).then(ok => {
+            if (!ok) return;
+            showBusy('貸出中…');
+            apiCall('lendArea', { areaId: a.id, targetEmail: u.email, dueDate: due ? due.replace(/-/g, '/') : '' })
+                .then(d => { lendState.users = d.users; lendState.areas = d.areas; renderLendScreen(); showToast('貸し出しました', false); })
+                .catch(handleServerError).finally(hideBusy);
+        });
+    }
+    function doReturnArea(id, label) {
+        appConfirm(`「${label}」を返却済みにします。`, { okLabel: '返却する' }).then(ok => {
+            if (!ok) return;
+            showBusy('返却中…');
+            apiCall('returnArea', { areaId: id })
+                .then(d => { lendState.users = d.users; lendState.areas = d.areas; renderLendScreen(); showToast('返却しました', false); })
+                .catch(handleServerError).finally(hideBusy);
+        });
+    }
+
+    // ── 管理: ユーザー管理（保存すると UserList とスプレッドシートの共有を更新） ──
+    let userAdminState = [];
+    function showUserAdmin() {
+        openAppModal('👥 ユーザー管理');
+        apiCall('getUsers', {}).then(list => {
+            userAdminState = (list || []).map(u => ({ email: u.email, name: u.name, role: u.role, group: u.group }));
+            renderUserAdmin();
+        }).catch(handleServerError);
+    }
+    function renderUserAdmin() {
+        const body = document.getElementById('app-modal-body');
+        let html = '<div style="font-size:12px; color:#666; margin-bottom:8px;">保存すると、この一覧の内容で<b>スプレッドシートの共有も更新</b>されます（追加=招待・削除=解除）。</div>';
+        html += userAdminState.map((u, i) =>
+            `<div class="lend-row" style="flex-wrap:wrap;">`
+            + `<input style="flex:2; min-width:170px; font-size:13px; padding:6px;" placeholder="メールアドレス" value="${escHtml(u.email)}" onchange="userAdminState[${i}].email = this.value">`
+            + `<input style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="漢字名" value="${escHtml(u.name)}" onchange="userAdminState[${i}].name = this.value">`
+            + `<input style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="グループ" value="${escHtml(u.group)}" onchange="userAdminState[${i}].group = this.value">`
+            + `<select style="font-size:13px; padding:6px;" onchange="userAdminState[${i}].role = this.value"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>一般</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>管理者</option></select>`
+            + `<button class="clear-btn" onclick="userAdminState.splice(${i}, 1); renderUserAdmin();">削除</button></div>`
+        ).join('');
+        html += '<div style="display:flex; gap:8px; margin-top:10px;">'
+            + `<button class="choice-btn" style="flex:1; background:#eef3f6;" onclick="userAdminState.push({email:'',name:'',group:'',role:'user'}); renderUserAdmin();">＋ 行を追加</button>`
+            + `<button class="choice-btn" style="flex:1; background:#5E9DB8; border-color:#5E9DB8; color:#fff;" onclick="saveUserAdmin()">保存する</button>`
+            + '</div>';
+        body.innerHTML = html;
+    }
+    function saveUserAdmin() {
+        const users = userAdminState
+            .map(u => ({ email: String(u.email || '').trim().toLowerCase(), name: u.name || '', role: u.role === 'admin' ? 'admin' : 'user', group: u.group || '' }))
+            .filter(u => u.email);
+        appConfirm('ユーザー一覧を保存し、スプレッドシートの共有にも反映します。', { okLabel: '保存する' }).then(ok => {
+            if (!ok) return;
+            showBusy('保存中…');
+            apiCall('saveUsers', { users: users }).then(list => {
+                userAdminState = (list || []).map(u => ({ email: u.email, name: u.name, role: u.role, group: u.group }));
+                renderUserAdmin();
+                showToast('保存しました（共有も更新）', false);
+            }).catch(handleServerError).finally(hideBusy);
+        });
     }
 
     // ✨ 最重要: スプレッドシートから読み込んだ瞬間に「絶対数値化」する描画処理
