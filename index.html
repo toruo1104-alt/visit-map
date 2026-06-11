@@ -2001,8 +2001,8 @@
         const lent = lendState.areas.filter(a => a.user);
         html += `<div style="font-weight:bold; border-top:1px solid #ddd; padding-top:8px;">貸出中の区域（${lent.length}）</div>`;
         html += lent.length ? lent.map(a =>
-            `<div class="lend-row"><div class="grow"><b>${escHtml(a.area)}</b><br>`
-            + `<span style="font-size:12px; color:#666;">${escHtml(a.name || uname(a.user))} ／ ${escHtml(a.lendDate || '-')} → <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
+            `<div class="lend-row"><div class="grow"><b>${escHtml(a.area)}</b>　<span style="font-size:13px; color:#333;">${escHtml(a.name || uname(a.user))}</span><br>`
+            + `<span style="font-size:12px; color:#666;">${escHtml(a.lendDate || '-')} → <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
             + `<button class="clear-btn" onclick="doReturnArea(${a.id}, '${escHtml(a.area)}')">返却</button></div>`
         ).join('') : '<div style="color:#888; padding:6px;">ありません</div>';
         body.innerHTML = html;
