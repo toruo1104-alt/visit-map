@@ -261,6 +261,7 @@
     const SESSION_TOKEN_KEY = 'vm_idtoken';
     const SESSION_TS_KEY = 'vm_idtoken_ts';
     const SESSION_MAX_MS = 12 * 60 * 60 * 1000; // 保存の上限（実際はトークン失効=約1時間が先に効く）
+    const DATA_CACHE_KEY = 'vm_dataCache';      // 前回取得した地図データ（起動時の先行表示用）
 
     function saveSession(token) {
         try {
@@ -269,7 +270,8 @@
         } catch (e) {}
     }
     function clearSession() {
-        try { localStorage.removeItem(SESSION_TOKEN_KEY); localStorage.removeItem(SESSION_TS_KEY); } catch (e) {}
+        // データキャッシュも一緒に破棄する（サインアウト後、権限のない別アカウントに前データが見えるのを防ぐ）
+        try { localStorage.removeItem(SESSION_TOKEN_KEY); localStorage.removeItem(SESSION_TS_KEY); localStorage.removeItem(DATA_CACHE_KEY); } catch (e) {}
     }
     // 保存トークンが「保存上限内 かつ JWT未失効」なら返す。だめなら null。
     function loadValidSession() {
@@ -335,6 +337,9 @@
     }
     window.addEventListener('load', initScale);
     window.addEventListener('load', () => {
+        // GASのコールドスタートをログイン画面の間に済ませておく（応答は読まずに捨てる）
+        try { fetch(GAS_API_URL).catch(() => {}); } catch (e) {}
+        loadCachedData(); // 期限切れデータキャッシュの掃除（サインインせず開いた場合でも消す）
         // まず未失効の保存セッションで復帰を試み、その後 GIS を初期化（失効後の再サインイン用）
         tryResumeSession();
         initGoogleSignIn();
@@ -1546,15 +1551,67 @@
         }).finally(hideBusy);
     }
 
+    /* ── データキャッシュ（起動の先行表示用） ──
+       取得済みデータを localStorage に保存しておき、次回起動時はまずそれで即ピンを描画 →
+       裏で最新を取得して静かに差し替える。「読み込み中…」の待ちを起動時から無くす。
+       【端末に残す情報を最小化】
+        ・履歴・メモ・更新者メールは保存しない（先行表示＝ピン描画には不要。裏の最新取得で揃う）
+        ・有効期間は6時間。期限切れ・形式不正は「使わない」だけでなく端末からも物理削除する */
+    const DATA_CACHE_MAX_MS = 6 * 60 * 60 * 1000;
+    const CACHE_OMIT_FIELDS = ['履歴データ', '特記事項', '最終更新者']; // 漏えい時に痛い機微フィールド
+    function saveDataCache(data) {
+        try {
+            const slim = data.map(item => {
+                const o = Object.assign({}, item);
+                CACHE_OMIT_FIELDS.forEach(k => { delete o[k]; });
+                return o;
+            });
+            localStorage.setItem(DATA_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: slim }));
+        } catch (e) {}
+    }
+    function loadCachedData() {
+        try {
+            const raw = localStorage.getItem(DATA_CACHE_KEY);
+            if (!raw) return null;
+            const c = JSON.parse(raw);
+            if (!c || !Array.isArray(c.data) || Date.now() - (c.ts || 0) > DATA_CACHE_MAX_MS) {
+                localStorage.removeItem(DATA_CACHE_KEY); // 期限切れは端末から消す
+                return null;
+            }
+            return c.data;
+        } catch (e) {
+            try { localStorage.removeItem(DATA_CACHE_KEY); } catch (e2) {} // 壊れた保存も消す
+            return null;
+        }
+    }
     function loadDataFromSheet() {
-        showBusy('読み込み中…');
-        apiCall('getData', {}).then((data) => {
-            renderMarkers(data);
+        const openDeepLinkPin = () => {
             // スプレッドシートの行リンク(?pin=行番号)で来た場合は、そのピンの吹き出しを開く（初回のみ）
             if (DEEP_LINK_PIN && !deepLinkPinDone) {
                 deepLinkPinDone = true;
                 openPinDeepLink(Number(DEEP_LINK_PIN));
             }
+        };
+        const cached = loadCachedData();
+        if (cached) {
+            // 先行表示：前回データで即描画し、画面をブロックせず裏で最新化する
+            renderMarkers(cached);
+            apiCall('getData', {}).then((data) => {
+                if (activeNewMarker || document.querySelector('.mapboxgl-popup')) {
+                    currentData = data;   // 操作中は差し替えを保留（以後の再描画・更新で反映される）
+                    saveDataCache(data);
+                } else {
+                    renderMarkers(data);  // キャッシュ保存は renderMarkers 内で行う
+                }
+                openDeepLinkPin(); // 行リンクは最新データで照合してから開く
+            }).catch(handleServerError);
+            return;
+        }
+        // 初回（キャッシュなし）：従来どおり取得完了までブロック表示
+        showBusy('読み込み中…');
+        apiCall('getData', {}).then((data) => {
+            renderMarkers(data);
+            openDeepLinkPin();
         }).catch(handleServerError).finally(hideBusy);
     }
 
@@ -1682,6 +1739,7 @@
             return;
         }
         currentData = data;
+        saveDataCache(data); // 次回起動の先行表示用に保存（同一データの再保存は無害）
 
         // ピンが多いときは画面内のみ描画（少なければ全件）
         limitedMode = data.length > MAX_RENDER_ALL;
