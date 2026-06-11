@@ -118,8 +118,9 @@
 
         /* ── 処理中インジケーター（サーバー通信中に表示） ── */
         /* 更新中の操作ブロック用オーバーレイ（クリックを吸収して操作不可にする） */
-        #busy-overlay { position: absolute; inset: 0; z-index: 10000; background: rgba(0,0,0,0.06); display: none; cursor: progress; }
-        #busy-indicator { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10001; background: rgba(44,62,80,0.92); color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 14px; display: none; align-items: center; gap: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
+        /* busy はモーダル類（住所10002・管理10003・確認10005）より上＝どの画面の操作でも見える最前面に置く */
+        #busy-overlay { position: absolute; inset: 0; z-index: 10006; background: rgba(0,0,0,0.06); display: none; cursor: progress; }
+        #busy-indicator { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10007; background: rgba(44,62,80,0.92); color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 14px; display: none; align-items: center; gap: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
         #busy-indicator .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: busy-spin 0.7s linear infinite; }
         @keyframes busy-spin { to { transform: rotate(360deg); } }
 
@@ -1818,7 +1819,7 @@
         if (!el) {
             el = document.createElement('div');
             el.id = 'app-toast';
-            el.style.cssText = 'position:absolute; top:60px; left:50%; transform:translateX(-50%); z-index:10001; padding:8px 14px; border-radius:6px; font-size:14px; box-shadow:0 2px 6px rgba(0,0,0,0.3); max-width:90%; text-align:center;';
+            el.style.cssText = 'position:absolute; top:60px; left:50%; transform:translateX(-50%); z-index:10008; padding:8px 14px; border-radius:6px; font-size:14px; box-shadow:0 2px 6px rgba(0,0,0,0.3); max-width:90%; text-align:center;'; // トースト=結果通知は最前面（モーダル・busyより上）
             document.body.appendChild(el);
         }
         el.style.background = isError ? '#C75F56' : '#5FA97D';
