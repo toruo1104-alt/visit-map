@@ -5,6 +5,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>map tool</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗺️</text></svg>">
+    <script>
+    /* ── 互換チェッカー（古い端末のセーフティネット） ──
+       本体スクリプトは新しい文法(ES6+)のため、古いブラウザでは「読み込み自体」が失敗して真っ白になる。
+       このブロックだけは古いブラウザでも必ず動くよう ES5 文法のみで書き、
+       NGの端末では理由つきの案内を表示する（変更時もこのブロック内に新しい文法を持ち込まないこと）。
+       チェック: ①ES6文法（evalでしか事前判定できないため意図的に使用） ②WebGL2（Mapbox GL JS v3 の必須要件） */
+    (function () {
+        var reason = '';
+        try { eval('var __es6test = () => {};'); } catch (e) { reason = 'ブラウザのバージョンが古い'; }
+        if (!reason) {
+            try {
+                if (!document.createElement('canvas').getContext('webgl2')) reason = '地図機能（WebGL2）に非対応';
+            } catch (e2) { reason = '地図機能（WebGL2）に非対応'; }
+        }
+        var shown = false;
+        function showBlock(msg) {
+            if (shown) return;
+            shown = true;
+            var d = document.createElement('div');
+            d.setAttribute('style', 'position:fixed; top:0; left:0; right:0; bottom:0; z-index:99999; background:#faf7f2; color:#2c3e50; font-family:sans-serif; text-align:center; padding:60px 24px; box-sizing:border-box;');
+            d.innerHTML = '<div style="font-size:20px; font-weight:bold; margin-bottom:14px;">この端末ではご利用いただけません。</div>'
+                + '<div style="font-size:15px; margin-bottom:28px;">管理者に相談してください。</div>'
+                + '<div style="font-size:11px; color:#888; line-height:1.7; word-break:break-all;">理由: ' + msg + '<br>' + (navigator.userAgent || '') + '</div>';
+            (document.body || document.documentElement).appendChild(d);
+        }
+        function onReady(fn) {
+            if (document.body) { fn(); return; }
+            document.addEventListener('DOMContentLoaded', fn);
+        }
+        if (reason) {
+            onReady(function () { showBlock(reason); });
+        } else {
+            // 文法チェックを通過しても本体の読み込み（パース）に失敗する端末向けの保険。
+            // 同一オリジンのスクリプトの SyntaxError のみ拾う（CDN等の読込失敗はここでは対象外）。
+            window.addEventListener('error', function (ev) {
+                if (ev && ev.error && Object.prototype.toString.call(ev.error) === '[object SyntaxError]') {
+                    onReady(function () { showBlock('アプリの読み込みに失敗'); });
+                }
+            });
+        }
+    })();
+    </script>
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
