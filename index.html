@@ -471,6 +471,12 @@
         } catch (e) {}
     });
 
+    /* Mapbox内蔵の「タップ→続けてドラッグで1本指ズーム」(tapDragZoom)を無効化する。
+       吹き出しを閉じるタップの直後にスクロールを始めると、連続タップ＋ドラッグと誤認されて
+       1本指のスクロールがズームになってしまうため。ズームは2本指ピンチ／ダブルタップで従来どおり可能。
+       （内部ハンドラへのアクセスのため、構造が変わった場合に備えて try で保護） */
+    try { map.handlers._handlersById.tapDragZoom.disable(); } catch (e) {}
+
     // 右上にコンパス（クリックで北が上に戻る）
     map.addControl(new mapboxgl.NavigationControl({ showZoom: false, showCompass: true, visualizePitch: true }), 'top-right');
 
@@ -607,7 +613,7 @@
        ・詳細/部屋操作: タップ＝即保存（従来のonchange相当）。保存後の再描画で新しい現在値が光る。
        ・新規フォーム: タップ＝選択のみ（hidden input に値を保持し、登録ボタンで確定）＝pickNewChoice。 */
     const ATTR_CHOICES = [
-        { v: '通常',     roomV: '未訪問',   label: '訪問可', on: '#7f8c8d', offText: '#555' },
+        { v: '通常',     roomV: '未訪問',   label: '訪問可', on: '#F2E394', onText: '#6b5a1e', offText: '#555' }, // 薄黄は白文字が読めないため濃黄土文字
         { v: '訪問拒否', roomV: '訪問拒否', label: '拒否',   on: '#A8554E', offText: '#A8554E' },
         { v: '外国語',   roomV: '外国語',   label: '外国語', on: '#8E79AB', offText: '#8E79AB' },
         { v: '空き家',   roomV: '空き家',   label: '空き家', on: '#8C8C8C', offText: '#666' }
@@ -626,7 +632,7 @@
         return '<div class="choice-grid c4">' + ATTR_CHOICES.map(c => {
             const val = useRoomV ? c.roomV : c.v;
             const on = isAttr ? current === val : c.label === '訪問可'; // 属性でなければ「訪問可」が現在値
-            const onStyle = `background:${c.on}; border-color:${c.on}; color:#fff;`;
+            const onStyle = `background:${c.on}; border-color:${c.on}; color:${c.onText || '#fff'};`;
             const offStyle = `color:${c.offText};`;
             return choiceBtnHtml(c.label, onStyle, offStyle, on, onclickTpl.replace('%v', val));
         }).join('') + '</div>';
@@ -646,7 +652,7 @@
         const isAttr = ['訪問拒否', '外国語', '空き家'].indexOf(current) >= 0;
         const cur = (isAttr && ATTR_CHOICES.find(c => (useRoomV ? c.roomV : c.v) === current)) || ATTR_CHOICES[0];
         return `<button class="choice-btn attr-cur" data-cur="${current || ''}" data-tpl="${onclickTpl}" data-room="${useRoomV ? 1 : 0}"`
-            + ` style="background:${cur.on}; border-color:${cur.on}; color:#fff;" onclick="expandAttrChoices(this)">${cur.label} ▾</button>`;
+            + ` style="background:${cur.on}; border-color:${cur.on}; color:${cur.onText || '#fff'};" onclick="expandAttrChoices(this)">${cur.label} ▾</button>`;
     }
     // 現在値ボタンをタップ → 4択に展開（flex行内では折り返して全幅表示。選択すると保存/畳みで戻る）
     function expandAttrChoices(btn) {
