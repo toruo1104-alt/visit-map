@@ -347,7 +347,7 @@
     const MY_TOKEN = 'pk.eyJ1IjoidG9ydW8xMTA0IiwiYSI6ImNtcTdlOGp2MzBhY3QycXBocno2OHQ5dmoifQ.bfkHvR5OmkacGJsDorHL5Q';
     mapboxgl.accessToken = MY_TOKEN;
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyUcL3WsTKv49YodpPLcMnJbZApd6RVrxUHHf6XwvhbHx_ELzcNP18NW2ILsYOf2eNr/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwB9NtdbYz2ylduuDYSLQv5HTtS7nJXWfxamXWABrFbqxU65JsZNzi-l1zEz6bssrlf/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
     // ↓ 地図スタイル（Mapbox Studio のスタイルURL。標準に戻す場合は 'mapbox://styles/mapbox/streets-v12'）
@@ -2118,14 +2118,24 @@
     function renderUserAdmin() {
         const body = document.getElementById('app-modal-body');
         let html = '<div style="font-size:12px; color:#666; margin-bottom:8px;">保存すると、この一覧の内容で<b>スプレッドシートの共有も更新</b>されます（追加=招待・削除=解除）。</div>';
-        html += userAdminState.map((u, i) =>
-            `<div class="lend-row" style="flex-wrap:wrap;">`
-            + `<input style="flex:2; min-width:170px; font-size:13px; padding:6px;" placeholder="メールアドレス" value="${escHtml(u.email)}" onchange="userAdminState[${i}].email = this.value">`
-            + `<input style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="漢字名" value="${escHtml(u.name)}" onchange="userAdminState[${i}].name = this.value">`
-            + `<input style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="グループ" value="${escHtml(u.group)}" onchange="userAdminState[${i}].group = this.value">`
-            + `<select style="font-size:13px; padding:6px;" onchange="userAdminState[${i}].role = this.value"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>一般</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>管理者</option></select>`
-            + `<button class="clear-btn" onclick="userAdminState.splice(${i}, 1); renderUserAdmin();">削除</button></div>`
-        ).join('');
+        html += userAdminState.map((u, i) => {
+            // オーナーはメール変更・降格・削除を不可にする（漢字名・グループは編集可。サーバー側でも検証している）
+            const isOwner = !!(ME.owner && String(u.email).trim().toLowerCase() === ME.owner);
+            if (isOwner) u.role = 'admin'; // 表示と送信値を一致させる（シート手編集で崩れていても矯正）
+            const emailAttrs = isOwner
+                ? 'readonly style="flex:2; min-width:170px; font-size:13px; padding:6px; background:#f0f0f0; color:#777;"'
+                : 'style="flex:2; min-width:170px; font-size:13px; padding:6px;" onchange="userAdminState[' + i + '].email = this.value"';
+            const roleControl = isOwner
+                ? '<span style="font-size:12px; color:#B0763C; font-weight:bold; padding:6px 2px; white-space:nowrap;">👑 オーナー（管理者）</span>'
+                : `<select style="font-size:13px; padding:6px;" onchange="userAdminState[${i}].role = this.value"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>一般</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>管理者</option></select>`
+                  + `<button class="clear-btn" onclick="userAdminState.splice(${i}, 1); renderUserAdmin();">削除</button>`;
+            return `<div class="lend-row" style="flex-wrap:wrap;">`
+                + `<input ${emailAttrs} placeholder="メールアドレス" value="${escHtml(u.email)}">`
+                + `<input style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="漢字名" value="${escHtml(u.name)}" onchange="userAdminState[${i}].name = this.value">`
+                + `<input style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="グループ" value="${escHtml(u.group)}" onchange="userAdminState[${i}].group = this.value">`
+                + roleControl
+                + `</div>`;
+        }).join('');
         html += '<div style="display:flex; gap:8px; margin-top:10px;">'
             + `<button class="choice-btn" style="flex:1; background:#eef3f6;" onclick="userAdminState.push({email:'',name:'',group:'',role:'user'}); renderUserAdmin();">＋ 行を追加</button>`
             + `<button class="choice-btn" style="flex:1; background:#5E9DB8; border-color:#5E9DB8; color:#fff;" onclick="saveUserAdmin()">保存する</button>`
