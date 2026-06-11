@@ -108,6 +108,7 @@
         /* ── 属性・訪問結果の選択ボタン（ネイティブselectの代替。色は凡例と同系） ── */
         .choice-grid { display: grid; gap: 5px; margin: 2px 0 8px; flex-basis: 100%; } /* flex行内で展開された時は折り返して全幅を使う */
         .choice-grid.c4 { grid-template-columns: repeat(4, 1fr); }
+        .choice-grid.c5 { grid-template-columns: repeat(5, 1fr); }
         .choice-grid.c3 { grid-template-columns: repeat(3, 1fr); }
         .choice-btn { padding: 9px 2px; border-radius: 6px; font-size: 13px; font-weight: bold; text-align: center; cursor: pointer; border: 1.5px solid #c8cfd6; background: #fff; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
         body.large-ui .choice-btn { font-size: 15px !important; padding: 11px 2px !important; }
@@ -229,6 +230,7 @@
     <div class="legend-row"><span class="legend-chip" style="background:#B0554D; color:#fff; clip-path:polygon(50% 2%,61% 35%,96% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,4% 35%,39% 35%);">拒</span>訪問拒否（☆・属性）</div>
     <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; color:#fff; clip-path:polygon(50% 2%,61% 35%,96% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,4% 35%,39% 35%);">外</span>外国語（☆・属性）</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#8C8C8C; border-radius:50%;">空</span>空き家/空き地（属性）</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#7f8c8d; border-radius:50%;">他</span>その他（属性）</div>
     <div style="font-weight:bold; font-size:10px; color:#666; margin:6px 0 2px;">── 集合住宅ピン（構成属性）──</div>
     <div class="legend-row"><span class="legend-chip" style="background:#F2E394; border:1px solid #ccc; border-radius:4px;"></span>ファミリー・混在</div>
     <div class="legend-row"><span class="legend-chip" style="background:#5B8BB0; border-radius:4px;"></span>シングル</div>
@@ -242,6 +244,7 @@
     <div class="legend-row"><span class="legend-chip" style="background:#A8554E; border:1px solid #ccc; color:#fff;">拒</span>訪問拒否（属性）</div>
     <div class="legend-row"><span class="legend-chip" style="background:#8E79AB; border:1px solid #ccc; color:#fff;">外</span>外国語（属性）</div>
     <div class="legend-row"><span class="legend-chip" style="background:#D4D4D4; border:1px solid #ccc; color:#555;">空</span>空き家/空き地（属性）</div>
+    <div class="legend-row"><span class="legend-chip" style="background:#CBD0D6; border:1px solid #ccc; color:#454c54;">他</span>その他（属性）</div>
 </div>
 
 <script>
@@ -259,7 +262,7 @@
      *  外部API設定（GAS Webアプリと fetch で通信）
      * ========================================================================= */
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxcLXPcslsNwnK44BXkp_E8mME8yLSVFd4FA51iqddwa9ym-H-RPoaOjbswC3yVUY6l/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzqys65rewGql7WB4BqI3a3DDjV6MEnRdvjNP-w8Bsx8vZkrmCTLHITwTX9UWw1sDgB/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
 
@@ -599,6 +602,7 @@
         if (status.indexOf('訪問拒否')   >= 0) return { char: '拒', bg: '#A8554E', color: '#ffffff' }; // くすみブリック
         if (status.indexOf('外国語')     >= 0) return { char: '外', bg: '#8E79AB', color: '#ffffff' }; // くすみパープル
         if (status.indexOf('空き家')     >= 0) return { char: '空', bg: '#D4D4D4', color: '#555555' };
+        if (status === '他')                   return { char: '他', bg: '#CBD0D6', color: '#454c54' };
         return { char: null, bg: '#E6F1F4', color: '#333333' }; // 未訪問（既定）
     }
 
@@ -616,7 +620,8 @@
         { v: '通常',     roomV: '未訪問',   label: '訪問可', on: '#F2E394', onText: '#6b5a1e', offText: '#555' }, // 薄黄は白文字が読めないため濃黄土文字
         { v: '訪問拒否', roomV: '訪問拒否', label: '拒否',   on: '#A8554E', offText: '#A8554E' },
         { v: '外国語',   roomV: '外国語',   label: '外国語', on: '#8E79AB', offText: '#8E79AB' },
-        { v: '空き家',   roomV: '空き家',   label: '空き家', on: '#8C8C8C', offText: '#666' }
+        { v: '空き家',   roomV: '空き家',   label: '空き',   on: '#8C8C8C', offText: '#666' }, // 表示は「空き」(5択を1行に収める)。保存値は従来どおり「空き家」
+        { v: '他',       roomV: '他',       label: '他',     on: '#7f8c8d', offText: '#666' }
     ];
     const RESULT_CHOICES = [
         { v: '不在',   label: '不在',   on: '#3D7FA8', offBg: '#CBE3F0', offText: '#0d3c55', offBd: '#9fc4da' },
@@ -628,8 +633,8 @@
     }
     // 属性の4択ボタン。current=現在値、onclickTpl の %v が値に置換される。useRoomV=部屋用の値体系(未訪問)を使う
     function attrChoiceHtml(current, onclickTpl, useRoomV) {
-        const isAttr = ['訪問拒否', '外国語', '空き家'].indexOf(current) >= 0;
-        return '<div class="choice-grid c4">' + ATTR_CHOICES.map(c => {
+        const isAttr = ['訪問拒否', '外国語', '空き家', '他'].indexOf(current) >= 0;
+        return '<div class="choice-grid c5">' + ATTR_CHOICES.map(c => {
             const val = useRoomV ? c.roomV : c.v;
             const on = isAttr ? current === val : c.label === '訪問可'; // 属性でなければ「訪問可」が現在値
             const onStyle = `background:${c.on}; border-color:${c.on}; color:${c.onText || '#fff'};`;
@@ -649,7 +654,7 @@
     }
     // 属性の現在値ボタン（ラベル無し。住所行・部屋番号行の右端に置く）。タップで4択に展開する。
     function attrLineHtml(current, onclickTpl, useRoomV) {
-        const isAttr = ['訪問拒否', '外国語', '空き家'].indexOf(current) >= 0;
+        const isAttr = ['訪問拒否', '外国語', '空き家', '他'].indexOf(current) >= 0;
         const cur = (isAttr && ATTR_CHOICES.find(c => (useRoomV ? c.roomV : c.v) === current)) || ATTR_CHOICES[0];
         return `<button class="choice-btn attr-cur" data-cur="${current || ''}" data-tpl="${onclickTpl}" data-room="${useRoomV ? 1 : 0}"`
             + ` style="background:${cur.on}; border-color:${cur.on}; color:${cur.onText || '#fff'};" onclick="expandAttrChoices(this)">${cur.label} ▾</button>`;
@@ -1284,6 +1289,7 @@
         if (attr === '訪問拒否') return { char: '拒', color: '#B0554D', star: true };
         if (attr === '外国語')   return { char: '外', color: '#8E79AB', star: true };
         if (attr === '空き家')   return { char: '空', color: '#8C8C8C' };
+        if (attr === '他')       return { char: '他', color: '#7f8c8d' };
         const s = item.最新ステータス;
         const ab = String(s).match(/不在\((\d+)回目\)/); // 不在は回数を抽出（上限なし）
         if (ab) {
