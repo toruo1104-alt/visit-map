@@ -289,6 +289,7 @@
     <button class="menu-item" onclick="closeMenu(); showMyAreas();">📋 割り当て区域</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showLendScreen();">🗂 区域の貸出・返却</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showUserAdmin();">👥 ユーザー管理</button>
+    <button class="menu-item admin-only" onclick="closeMenu(); showMaintenance();">🧹 メンテナンス</button>
     <button class="menu-item" onclick="closeMenu(); signOut();">🚪 サインアウト</button>
 </div>
 
@@ -369,7 +370,7 @@
     const MY_TOKEN = 'pk.eyJ1IjoidG9ydW8xMTA0IiwiYSI6ImNtcTdlOGp2MzBhY3QycXBocno2OHQ5dmoifQ.bfkHvR5OmkacGJsDorHL5Q';
     mapboxgl.accessToken = MY_TOKEN;
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxZ7dzYecgwW29KR20DYImg8tsWCZE_gOAz36Ju6Mu73rD-YI2jVjrTBhK4sJgNEs-f/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycby6bXSeLCtf6OcXWgNt_7i2x_h5APpIa0Voh_wgD7Dw40si863BDFqZdrKU5kHCeg42/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
     // ↓ 地図スタイル（Mapbox Studio のスタイルURL。標準に戻す場合は 'mapbox://styles/mapbox/streets-v12'）
@@ -2168,6 +2169,45 @@
     }
 
     // ── 割り当て区域（自分に貸出中の一覧。タップでその区域を表示） ──
+    // 管理: メンテナンス（指定期間の訪問結果・履歴をクリア。属性・住所・個人宅・建物情報は保持）
+    function showMaintenance() {
+        openAppModal('🧹 メンテナンス');
+        const body = document.getElementById('app-modal-body');
+        const pad = n => String(n).padStart(2, '0');
+        const td = new Date(), ps = new Date(); ps.setMonth(ps.getMonth() - 6);
+        const toVal = `${td.getFullYear()}-${pad(td.getMonth() + 1)}-${pad(td.getDate())}`;
+        const fromVal = `${ps.getFullYear()}-${pad(ps.getMonth() + 1)}-${pad(ps.getDate())}`;
+        body.innerHTML =
+            `<div style="font-size:13px; color:#555; margin-bottom:10px;">指定した期間の<b>訪問結果(不在/会えた/投函)と履歴</b>を消去します。<br>属性(拒否/外国語/空き家)・住所・個人宅・建物情報は<b>消えません</b>。</div>`
+            + `<div style="display:flex; gap:6px; align-items:center; margin-bottom:6px;"><label style="width:48px; font-size:13px; font-weight:bold;">開始</label><input type="date" id="mnt-from" value="${fromVal}" style="flex:1; min-width:0;"></div>`
+            + `<div style="display:flex; gap:6px; align-items:center; margin-bottom:14px;"><label style="width:48px; font-size:13px; font-weight:bold;">終了</label><input type="date" id="mnt-to" value="${toVal}" style="flex:1; min-width:0;"></div>`
+            + `<button class="clear-btn" style="width:100%; margin-bottom:8px;" onclick="runMaintenance('history')">🗑 この期間の履歴をクリア</button>`
+            + `<button class="clear-btn" style="width:100%; background:#8a6d3b;" onclick="runMaintenance('status')">🔄 この期間の訪問ステータスをクリア</button>`;
+    }
+    function runMaintenance(kind) {
+        const from = (document.getElementById('mnt-from') || {}).value || '';
+        const to = (document.getElementById('mnt-to') || {}).value || '';
+        if (!from || !to) { appAlert('開始日と終了日を指定してください'); return; }
+        if (from > to) { appAlert('開始日が終了日より後になっています'); return; }
+        const label = (kind === 'history') ? '履歴' : '訪問ステータス';
+        appConfirm(`${from} 〜 ${to}\nこの期間の${label}をクリアします。\n（属性・住所・個人宅・建物情報は消えません）`, { danger: true, okLabel: '次へ' }).then(ok => {
+            if (!ok) return;
+            appConfirm('この操作は元に戻せません。本当に実行しますか？', { danger: true, okLabel: '実行する' }).then(ok2 => {
+                if (!ok2) return;
+                showBusy('クリア中…');
+                const action = (kind === 'history') ? 'clearHistoryRange' : 'clearStatusRange';
+                apiCall(action, { from: from.replace(/-/g, '/'), to: to.replace(/-/g, '/') })
+                    .then(res => {
+                        renderMarkers(res.data);
+                        closeAppModal();
+                        const n = (kind === 'history') ? res.removed : res.cleared;
+                        showToast(`${label}を ${n} 件クリアしました`, false);
+                    })
+                    .catch(handleServerError).finally(hideBusy);
+            });
+        });
+    }
+
     function showMyAreas() {
         openAppModal('📋 割り当て区域');
         showBusy('読み込み中…');
