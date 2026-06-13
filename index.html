@@ -1509,31 +1509,30 @@
         }
     }
 
-    // マーカーを長押しすると「移動モード」（振動）に入り、指を動かすとアイコンが追従し、離すと確認して座標を保存する。
+    // マーカーを長押しすると「移動モード」（金色グロー）に入り、指を動かすとアイコンが追従し、離すと確認して座標を保存する。
     // Mapbox標準のドラッグは長押し後の同一タッチでは効かないため、pointermoveで自前にマーカーを動かす。
-    // 通常タップ（吹き出し）と区別するため長押し(500ms)で起動。移動中は地図のパンと新規登録を止める。
+    // touch/mouse を混在させると合成イベントで二重起動し、移動モードのdocumentリスナが残って以降のタップが
+    // 効かなくなるため、pointer events に統一する。通常タップ（吹き出し）と区別するため長押し(500ms)で起動。
     function enableMarkerDragOnLongPress(marker, el, rowNumber) {
-        let pressTimer = null, moving = false, dragged = false;
+        let pressTimer = null, moving = false, dragged = false, sx = 0, sy = 0;
         const onMove = (cx, cy) => {
             if (!moving) return;
             dragged = true;
             const rect = map.getContainer().getBoundingClientRect();
             marker.setLngLat(map.unproject([cx - rect.left, cy - rect.top]));
         };
-        const onTM = (e) => { if (moving) { e.preventDefault(); const t = e.touches[0]; if (t) onMove(t.clientX, t.clientY); } };
-        const onMM = (e) => onMove(e.clientX, e.clientY);
+        const onPM = (e) => { if (moving) { e.preventDefault(); onMove(e.clientX, e.clientY); } };
         const finishMove = () => {
             if (!moving) return;
             moving = false;
             el.classList.remove('marker-moving');
             map.dragPan.enable();
-            document.removeEventListener('touchmove', onTM);
-            document.removeEventListener('touchend', finishMove);
-            document.removeEventListener('mousemove', onMM);
-            document.removeEventListener('mouseup', finishMove);
+            document.removeEventListener('pointermove', onPM);
+            document.removeEventListener('pointerup', finishMove);
+            document.removeEventListener('pointercancel', finishMove);
             suppressMapTapUntil = Date.now() + 1500; // 離した直後の地図タップ（新規登録）を抑止
             clearTimeout(singleTapTimer);            // 予約済みの戸建て登録タイマーもキャンセル
-            if (!dragged) return; // 動かさず離した → 何もしない
+            if (!dragged) return; // 動かさず離した → 何もしない（通常の click で吹き出しが開く）
             const ll = marker.getLngLat();
             appConfirm('このピンをここへ移動しますか？', { okLabel: '移動する' }).then(ok => {
                 if (!ok) { renderMarkers(currentData); return; } // キャンセル → 元の位置へ戻す
@@ -1551,19 +1550,19 @@
             suppressMapTapUntil = Date.now() + 30000; // 移動モード中は地図の長押し/タップ（新規登録）を抑止
             clearTimeout(singleTapTimer);             // 既に予約された戸建て登録タイマーを消す
             showToast('指で動かして移動 → 離して確定', false);
-            document.addEventListener('touchmove', onTM, { passive: false });
-            document.addEventListener('touchend', finishMove);
-            document.addEventListener('mousemove', onMM);
-            document.addEventListener('mouseup', finishMove);
+            document.addEventListener('pointermove', onPM, { passive: false });
+            document.addEventListener('pointerup', finishMove);
+            document.addEventListener('pointercancel', finishMove);
         };
-        const startPress = (e) => { if (e && e.stopPropagation) e.stopPropagation(); clearTimeout(pressTimer); pressTimer = setTimeout(enter, 500); };
+        const startPress = (e) => { sx = e.clientX; sy = e.clientY; clearTimeout(pressTimer); pressTimer = setTimeout(enter, 500); };
         const cancelPress = () => clearTimeout(pressTimer);
-        el.addEventListener('touchstart', startPress, { passive: true });
-        el.addEventListener('touchend', cancelPress);
-        el.addEventListener('touchmove', cancelPress);
-        el.addEventListener('mousedown', startPress);
-        el.addEventListener('mouseup', cancelPress);
-        el.addEventListener('mouseleave', cancelPress);
+        const moveCancel = (e) => { if (!moving && (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10)) clearTimeout(pressTimer); };
+        el.addEventListener('pointerdown', startPress);
+        el.addEventListener('pointerup', cancelPress);
+        el.addEventListener('pointermove', moveCancel);
+        el.addEventListener('pointercancel', cancelPress);
+        el.addEventListener('pointerleave', cancelPress);
+        el.addEventListener('contextmenu', (e) => e.preventDefault()); // 長押し時のコールアウト（選択メニュー）を抑止
     }
 
     map.on('load', () => { /* データ取得はサインイン成功後（handleCredential）に行う */ });
