@@ -171,8 +171,8 @@
         .go-pick-btn.cur { background: #3D7FA8; color: #fff; border-color: #3D7FA8; }
         #go-pick-cancel { display: block; width: 100%; margin-top: 12px; padding: 12px; font-size: 15px; border: 1px solid #ccc; border-radius: 6px; background: #eef1f4; cursor: pointer; }
         /* アイコン移動モードの振動（rotate個別プロパティ＝Mapboxの位置transformを保ちつつ回転） */
-        @keyframes marker-shake { 0%, 100% { rotate: -1.2deg; } 50% { rotate: 1.2deg; } }
-        .custom-marker.marker-shake { animation: marker-shake 0.5s ease-in-out infinite; z-index: 10000; }
+        /* アイコン移動モード：金色の縁＋外側に向かって薄くなるグロー（現在地の青丸の外側のイメージ） */
+        .custom-marker.marker-moving { box-shadow: 0 0 0 3px #FFD700, 0 0 10px 4px rgba(255,200,0,0.55), 0 0 22px 11px rgba(255,200,0,0.22) !important; z-index: 10000; }
         /* 履歴の編集モーダル */
         #hist-edit-overlay { position: absolute; inset: 0; z-index: 10007; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; }
         #hist-edit-card { background: #fff; border-radius: 10px; padding: 18px; width: 88%; max-width: 340px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
@@ -1525,13 +1525,14 @@
         const finishMove = () => {
             if (!moving) return;
             moving = false;
-            el.classList.remove('marker-shake');
+            el.classList.remove('marker-moving');
             map.dragPan.enable();
             document.removeEventListener('touchmove', onTM);
             document.removeEventListener('touchend', finishMove);
             document.removeEventListener('mousemove', onMM);
             document.removeEventListener('mouseup', finishMove);
-            suppressMapTapUntil = Date.now() + 1000; // 離した直後の地図タップ（新規登録）を抑止
+            suppressMapTapUntil = Date.now() + 1500; // 離した直後の地図タップ（新規登録）を抑止
+            clearTimeout(singleTapTimer);            // 予約済みの戸建て登録タイマーもキャンセル
             if (!dragged) return; // 動かさず離した → 何もしない
             const ll = marker.getLngLat();
             appConfirm('このピンをここへ移動しますか？', { okLabel: '移動する' }).then(ok => {
@@ -1545,9 +1546,10 @@
         };
         const enter = () => {
             moving = true; dragged = false;
-            el.classList.add('marker-shake');
+            el.classList.add('marker-moving');
             map.dragPan.disable();                    // 移動中は地図がパンしないように
             suppressMapTapUntil = Date.now() + 30000; // 移動モード中は地図の長押し/タップ（新規登録）を抑止
+            clearTimeout(singleTapTimer);             // 既に予約された戸建て登録タイマーを消す
             showToast('指で動かして移動 → 離して確定', false);
             document.addEventListener('touchmove', onTM, { passive: false });
             document.addEventListener('touchend', finishMove);
