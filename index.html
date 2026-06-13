@@ -178,6 +178,9 @@
         #hist-edit-card { background: #fff; border-radius: 10px; padding: 18px; width: 88%; max-width: 340px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
         #hist-edit-title { font-size: 16px; font-weight: bold; margin-bottom: 12px; text-align: center; }
         #hist-edit-dt { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        /* 進捗モニタリングの達成度バー */
+        .prog-bar { height: 9px; border-radius: 5px; background: #e7ebee; overflow: hidden; margin-top: 3px; }
+        .prog-bar > span { display: block; height: 100%; border-radius: 5px; }
         #busy-indicator { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10007; background: rgba(44,62,80,0.92); color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 14px; display: none; align-items: center; gap: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
         #busy-indicator .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: busy-spin 0.7s linear infinite; }
         @keyframes busy-spin { to { transform: rotate(360deg); } }
@@ -290,6 +293,7 @@
     <button class="menu-item admin-only" onclick="closeMenu(); showLendScreen();">🗂 区域の貸出・返却</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showUserAdmin();">👥 ユーザー管理</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showMaintenance();">🧹 メンテナンス</button>
+    <button class="menu-item admin-only" onclick="closeMenu(); showProgress();">📈 進捗モニタリング</button>
     <button class="menu-item" onclick="closeMenu(); signOut();">🚪 サインアウト</button>
 </div>
 
@@ -1592,6 +1596,8 @@
     // 入力フォームや詳細ポップアップが開いていれば閉じる。閉じたものがあれば true を返す。
     function closeOpenForms() {
         let closed = false;
+        const appModal = document.getElementById('app-modal');
+        if (appModal && appModal.style.display === 'flex') { closeAppModal(); return true; } // 管理モーダル（割り当て/貸出/ユーザー/メンテ/進捗）も Esc・背景タップで閉じる
         if (activeNewMarker) { activeNewMarker.remove(); activeNewMarker = null; closed = true; }
         currentMarkers.forEach(m => {
             const p = m.getPopup();
@@ -2206,6 +2212,124 @@
                     .catch(handleServerError).finally(hideBusy);
             });
         });
+    }
+
+    // ── 管理: 進捗モニタリング（丁目単位。currentData から その場集計＝常に最新。シートには書かない） ──
+    let progState = { mode: 'all', sort: 'rate', open: {} }; // mode: all/kodate/room、sort: rate(低い順)/count(多い順)
+    // 訪問結果（不在/会えた/投函）か＝訪問済み。属性(拒否/外国語/空き家/他/未訪問)は未訪問扱い。
+    function isVisitResult_(s) { s = String(s || ''); return s.indexOf('不在') >= 0 || s.indexOf('会えた') >= 0 || s.indexOf('投函') >= 0; }
+    function progTotals_(s, mode) {
+        if (mode === 'kodate') return { total: s.kodatePin, done: s.kodateDone };
+        if (mode === 'room') return { total: s.room, done: s.roomDone };
+        return { total: s.kodatePin + s.room, done: s.kodateDone + s.roomDone }; // 合算＝戸建てピン＋集合の部屋（棟は数えない）
+    }
+    function barColor_(r) { return r < 25 ? '#C75F56' : r < 50 ? '#D98E5A' : r < 70 ? '#E2C36A' : r < 85 ? '#9BC27E' : '#5E9DB8'; }
+    function fmtPct_(done, total) { return total ? Math.round(done / total * 1000) / 10 : 0; }
+    function progBar_(r) { return `<div class="prog-bar"><span style="width:${Math.min(100, r)}%; background:${barColor_(r)};"></span></div>`; }
+    // currentData を 地区→丁目 に集計する
+    function aggregateProgress() {
+        const blank = () => ({ kodatePin: 0, kodateDone: 0, room: 0, roomDone: 0, vacant: 0, refuse: 0 });
+        const tree = {};
+        const bucket = (district, chomeKey) => {
+            if (!tree[district]) tree[district] = { chomes: {}, total: blank() };
+            if (!tree[district].chomes[chomeKey]) tree[district].chomes[chomeKey] = blank();
+            return tree[district].chomes[chomeKey];
+        };
+        (currentData || []).forEach(item => {
+            const lng = parseFloat(item.経度), lat = parseFloat(item.緯度);
+            if (isNaN(lng) || isNaN(lat) || lng === 0 || lat === 0) return; // 地図描画と同じ条件で不正座標を除外
+            const addr = (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? addrWithoutGo(item.住所) : (deriveAddress(lng, lat) || '');
+            let district = '（住所未設定）', chomeKey = '（住所未設定）';
+            const m = String(addr).match(/^(.+?)(\d+丁目)\d+番$/);
+            if (m) { district = m[1]; chomeKey = m[1] + m[2]; }
+            else if (addr) { district = addr; chomeKey = addr; } // 丁目なし地区（鹿骨町 等）
+            const st = bucket(district, chomeKey);
+            if (item.種別 === '集合住宅') {
+                const validSet = {};
+                let rooms = 0;
+                String(item.有効部屋リスト || '').split(',').forEach(s => { const k = String(s).trim(); if (k !== '') { validSet[k] = true; rooms++; } });
+                let map = {};
+                try { map = JSON.parse(item.部屋ステータス || '{}') || {}; } catch (e) { map = {}; }
+                let roomsDone = 0;
+                Object.keys(map).forEach(k => {
+                    if (!validSet[k]) return; // 有効部屋リストにある部屋だけ集計（建物編集で外れた部屋のT列残骸は無視＝率が100%超になるのを防ぐ）
+                    const v = String(map[k] || '');
+                    if (isVisitResult_(v)) roomsDone++;
+                    else if (v.indexOf('空き家') >= 0) st.vacant++;
+                    else if (v.indexOf('訪問拒否') >= 0) st.refuse++;
+                });
+                st.room += rooms; st.roomDone += roomsDone; // 集合は「部屋」を母数にする（棟は数えない＝戸建てピンと二重計上しない）
+            } else {
+                st.kodatePin += 1;
+                const a = String(item.属性 || '');
+                const hasAttr = (a === '訪問拒否' || a === '外国語' || a === '空き家' || a === '他'); // 現在の状態が属性
+                if (a === '空き家') st.vacant++;
+                else if (a === '訪問拒否') st.refuse++;
+                // 現在の状態が属性なら訪問済みに数えない（集合の部屋判定と統一。訪問済み＝会えた/不在/投函）
+                if (!hasAttr && isVisitResult_(item.最新ステータス)) st.kodateDone += 1;
+            }
+        });
+        Object.keys(tree).forEach(d => {
+            const tot = tree[d].total;
+            Object.keys(tree[d].chomes).forEach(c => {
+                const s = tree[d].chomes[c];
+                tot.kodatePin += s.kodatePin; tot.kodateDone += s.kodateDone; tot.room += s.room; tot.roomDone += s.roomDone; tot.vacant += s.vacant; tot.refuse += s.refuse;
+            });
+        });
+        return tree;
+    }
+    function sortProg_(arr) {
+        if (progState.sort === 'rate') arr.sort((a, b) => a.rate - b.rate); // 進捗が低い順（遅れている所が上）
+        else arr.sort((a, b) => b.cnt - a.cnt);                              // 件数が多い順
+    }
+    function setProgMode(m) { progState.mode = m; renderProgress(); }
+    function toggleProgSort() { progState.sort = (progState.sort === 'rate') ? 'count' : 'rate'; renderProgress(); }
+    function toggleProgDistrict(d) { progState.open[d] = !progState.open[d]; renderProgress(); }
+    function showProgress() {
+        openAppModal('📈 進捗モニタリング');
+        const body = document.getElementById('app-modal-body');
+        if (!addrPoints) { body.innerHTML = '<div style="color:#888; padding:8px;">住所データを読み込み中です。少し待ってから開き直してください。</div>'; return; }
+        if (!currentData || !currentData.length) {
+            showBusy('読み込み中…');
+            apiCall('getData', {}).then(d => { renderMarkers(d); progState.tree = aggregateProgress(); renderProgress(); }).catch(handleServerError).finally(hideBusy);
+            return;
+        }
+        progState.tree = aggregateProgress(); // 集計は開いた時に1回だけ（モード/並び/展開のトグルでは再計算しない＝重い deriveAddress を繰り返さない）
+        renderProgress();
+    }
+    function renderProgress() {
+        const body = document.getElementById('app-modal-body');
+        const tree = progState.tree || aggregateProgress();
+        const mode = progState.mode;
+        const ML = { all: '合算', kodate: '戸建て', room: '部屋' };
+        let g = { total: 0, done: 0 };
+        Object.keys(tree).forEach(d => { const t = progTotals_(tree[d].total, mode); g.total += t.total; g.done += t.done; });
+        const grate = fmtPct_(g.done, g.total);
+        let html = '<div style="display:flex; gap:6px; margin-bottom:8px;">'
+            + ['all', 'kodate', 'room'].map(mk => `<button class="choice-btn" style="flex:1; ${mode === mk ? 'background:#5E9DB8; border-color:#5E9DB8; color:#fff;' : ''}" onclick="setProgMode('${mk}')">${ML[mk]}</button>`).join('')
+            + '</div>';
+        html += `<div style="background:#f0f7f9; border:1px solid #cfe3ec; border-radius:8px; padding:10px; margin-bottom:10px;">`
+            + `<div style="font-weight:bold; font-size:15px;">全体（${ML[mode]}）</div>`
+            + `<div style="font-size:14px; margin:4px 0;">訪問済 ${g.done} / ${g.total}　<b style="color:${barColor_(grate)};">${grate}%</b>　残 ${g.total - g.done}</div>`
+            + progBar_(grate) + '</div>';
+        html += `<div style="display:flex; justify-content:flex-end; margin-bottom:6px;"><button class="save-btn" style="background:#7f8c8d; padding:3px 8px;" onclick="toggleProgSort()">並び：${progState.sort === 'rate' ? '進捗が低い順' : '件数が多い順'} ▼</button></div>`;
+        const rows = Object.keys(tree).map(d => { const t = progTotals_(tree[d].total, mode); return { d: d, t: t, rate: fmtPct_(t.done, t.total), cnt: t.total }; });
+        sortProg_(rows);
+        rows.forEach(row => {
+            const d = row.d, t = row.t, rate = row.rate, opened = !!progState.open[d];
+            html += `<div class="lend-row" style="cursor:pointer;" onclick="toggleProgDistrict('${escHtml(d)}')">`
+                + `<div class="grow"><b>${opened ? '▾' : '▸'} ${escHtml(d)}</b>　<span style="font-size:12px; color:#666;">${t.done}/${t.total}・残${t.total - t.done}</span>${progBar_(rate)}</div>`
+                + `<div style="width:50px; text-align:right; font-weight:bold; color:${barColor_(rate)};">${rate}%</div></div>`;
+            if (opened) {
+                const crows = Object.keys(tree[d].chomes).map(c => { const ct = progTotals_(tree[d].chomes[c], mode); return { c: c, ct: ct, rate: fmtPct_(ct.done, ct.total), cnt: ct.total, stat: tree[d].chomes[c] }; });
+                sortProg_(crows);
+                crows.forEach(cr => {
+                    const s = cr.stat, extra = (s.vacant || s.refuse) ? `　空${s.vacant}/拒${s.refuse}` : '';
+                    html += `<div class="lend-row" style="padding-left:16px; background:#fafbfc;"><div class="grow"><span style="font-size:13px;">${escHtml(cr.c)}</span>　<span style="font-size:11px; color:#888;">${cr.ct.done}/${cr.ct.total}${extra}</span>${progBar_(cr.rate)}</div><div style="width:46px; text-align:right; font-size:13px; color:${barColor_(cr.rate)};">${cr.rate}%</div></div>`;
+                });
+            }
+        });
+        body.innerHTML = html;
     }
 
     function showMyAreas() {
