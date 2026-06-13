@@ -241,8 +241,8 @@
         select.numlist { height: auto; width: 100%; box-sizing: border-box; }
         body.large-ui .form-group select.numlist { padding: 2px !important; }
         /* 階数「2階」(漢字)と最大部屋数「03」(数字)で行高がずれないよう line-height を固定して揃える */
-        select.numlist option { padding: 6px 4px; text-align: center; line-height: 1.7; }
-        body.large-ui select.numlist option { font-size: 16px !important; padding: 8px 4px; line-height: 1.7; }
+        select.numlist option { padding: 2px 4px; text-align: center; line-height: 1.25; }
+        body.large-ui select.numlist option { font-size: 16px !important; padding: 3px 4px; line-height: 1.25; }
         body.large-ui .submit-btn { padding: 10px 14px !important; font-size: 18px !important; }
         body.large-ui .clear-btn, body.large-ui .save-btn { font-size: 15px !important; padding: 6px 14px !important; }
         body.large-ui .history-box { font-size: 15px !important; }
@@ -369,7 +369,7 @@
     const MY_TOKEN = 'pk.eyJ1IjoidG9ydW8xMTA0IiwiYSI6ImNtcTdlOGp2MzBhY3QycXBocno2OHQ5dmoifQ.bfkHvR5OmkacGJsDorHL5Q';
     mapboxgl.accessToken = MY_TOKEN;
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxpzOW2nAnL08lTWY6Sc0KxDOM9IbnBXs0J7llQQoWFtF8MVX7SuCYceHu0xRcNeQ2P/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxZ7dzYecgwW29KR20DYImg8tsWCZE_gOAz36Ju6Mu73rD-YI2jVjrTBhK4sJgNEs-f/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
     // ↓ 地図スタイル（Mapbox Studio のスタイルURL。標準に戻す場合は 'mapbox://styles/mapbox/streets-v12'）
@@ -2174,12 +2174,21 @@
         apiCall('getMyAreas', {}).then(list => {
             const body = document.getElementById('app-modal-body');
             if (!list || !list.length) { body.innerHTML = '<div style="color:#888; padding:8px;">現在割り当てられている区域はありません。</div>'; return; }
-            body.innerHTML = list.map(a =>
+            const rowHtml = a =>
                 `<div class="lend-row" style="cursor:pointer;" onclick="closeAppModal(); showAssignedArea('${escHtml(a.area)}')">`
                 + `<div class="grow"><b style="font-size:16px;">${escHtml(a.area)}</b>${a.count !== '' && a.count != null ? `<span style="color:#888; font-size:12px;">（${a.count}件）</span>` : ''}<br>`
                 + `<span style="color:#666; font-size:12px;">貸出: ${escHtml(a.lendDate || '-')} ／ 返却期日: <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
-                + `<span style="color:#5E9DB8; font-weight:bold;">▶</span></div>`
-            ).join('');
+                + `<span style="color:#5E9DB8; font-weight:bold;">▶</span></div>`;
+            const mine = list.filter(a => a.lentTo !== 'group'); // 自分個人への貸出
+            const grp = list.filter(a => a.lentTo === 'group');  // 自分の所属グループへの貸出
+            let html = mine.length ? mine.map(rowHtml).join('') : '<div style="color:#888; padding:8px;">あなた個人への割り当てはありません。</div>';
+            if (grp.length) {
+                html += `<div style="background:#f2f3f5; border-radius:6px; padding:8px; margin-top:10px;">`;
+                html += `<div style="font-weight:bold; padding-bottom:6px;">👥 グループへの割り当て（${escHtml(grp[0].group)}）</div>`;
+                html += grp.map(rowHtml).join('');
+                html += `</div>`;
+            }
+            body.innerHTML = html;
         }).catch(handleServerError).finally(hideBusy);
     }
 
@@ -2196,6 +2205,7 @@
     }
     function lendSel(k, v) {
         lendState.sel[k] = v;
+        if (k === 'group') lendState.sel.email = ''; // グループを変えたら「借りる人」選択をリセット
         if (k === 'district') { lendState.sel.chome = ''; lendState.sel.areaId = ''; }
         if (k === 'chome') lendState.sel.areaId = '';
         renderLendScreen();
@@ -2210,7 +2220,7 @@
         const opt = (v, l, cur) => `<option value="${escHtml(String(v))}" ${String(cur) === String(v) ? 'selected' : ''}>${escHtml(String(l))}</option>`;
         const groups = Array.from(new Set(lendState.users.map(u => u.group).filter(Boolean)));
         const users = lendState.users.filter(u => !s.group || u.group === s.group);
-        if (s.email && !users.some(u => u.email === s.email)) s.email = '';
+        if (s.email && s.email !== '__GROUP__' && !users.some(u => u.email === s.email)) s.email = '';
         const noChome = s.district && AREA_DATA[s.district] === null;
         const chomes = (s.district && !noChome) ? Object.keys(AREA_DATA[s.district]) : [];
         let areaOpts = [];
@@ -2225,18 +2235,19 @@
         let html = '<div style="font-weight:bold; margin-bottom:4px;">借りる人</div>'
             + '<div style="display:flex; gap:6px; margin-bottom:10px;">'
             + `<select style="flex:1; min-width:0;" onchange="lendSel('group', this.value)"><option value="">全グループ</option>${groups.map(g => opt(g, g, s.group)).join('')}</select>`
-            + `<select style="flex:2; min-width:0;" onchange="lendSel('email', this.value)"><option value="">-- ユーザー選択 --</option>${users.map(u => opt(u.email, (u.name || u.email) + (u.group ? '（' + u.group + '）' : ''), s.email)).join('')}</select>`
+            + `<select style="flex:2; min-width:0;" onchange="lendSel('email', this.value)"><option value="">-- ユーザー選択 --</option>${s.group ? opt('__GROUP__', '🟢 ' + s.group + '（グループ全体）', s.email) : ''}${users.map(u => opt(u.email, (u.name || u.email) + (u.group ? '（' + u.group + '）' : ''), s.email)).join('')}</select>`
             + '</div>'
             + '<div style="font-weight:bold; margin-bottom:4px;">区域</div>'
             + '<div style="display:flex; gap:6px; margin-bottom:8px;">'
             + `<select style="flex:1; min-width:0;" onchange="lendSel('district', this.value)"><option value="">地区</option>${Object.keys(AREA_DATA).map(d => opt(d, d, s.district)).join('')}</select>`
             + `<select style="flex:1; min-width:0;" onchange="lendSel('chome', this.value)" ${(!s.district || noChome) ? 'disabled' : ''}><option value="">丁目</option>${chomes.map(c => opt(c, c + '丁目', s.chome)).join('')}</select>`
-            + `<select style="flex:1.3; min-width:0;" onchange="lendSel('areaId', this.value)" ${!areaOpts.length ? 'disabled' : ''}><option value="">番地</option>${areaOpts.map(a => { const num = noChome ? a.area : a.area.replace(/^.*丁目/, ''); return opt(a.id, num + (a.user ? ' ●貸出中' : ''), s.areaId); }).join('')}</select>`
+            + `<select style="flex:1.3; min-width:0;" onchange="lendSel('areaId', this.value)" ${!areaOpts.length ? 'disabled' : ''}><option value="">番地</option>${areaOpts.map(a => { const num = noChome ? a.area : a.area.replace(/^.*丁目/, ''); return opt(a.id, num + ((a.user || a.group) ? ' ●貸出中' : ''), s.areaId); }).join('')}</select>`
             + '</div>';
         if (selArea) {
             // 貸出中=何回目かと現状、未貸出=最終返却日とこれまでの回数（「空き」とは表示しない）
-            const histInfo = selArea.user
-                ? `<span style="color:#C75F56;">貸出中（${selArea.lendCount || 1}回目）: ${escHtml(selArea.name || uname(selArea.user))}（${escHtml(selArea.lendDate || '-')} → ${escHtml(selArea.dueDate || '-')}）</span>`
+            const lentName = selArea.group ? selArea.group + '（グループ）' : (selArea.name || uname(selArea.user));
+            const histInfo = (selArea.user || selArea.group)
+                ? `<span style="color:#C75F56;">貸出中（${selArea.lendCount || 1}回目）: ${escHtml(lentName)}（${escHtml(selArea.lendDate || '-')} → ${escHtml(selArea.dueDate || '-')}）</span>`
                 : `<span style="color:#555;">最終返却日: ${escHtml(selArea.lastReturn || 'なし')}　これまで ${selArea.lendCount || 0} 回</span>`;
             html += `<div style="background:#f0f7f9; border:1px solid #cfe3ec; border-radius:6px; padding:8px; margin-bottom:8px;">`
                 + `<b>${escHtml(selArea.area)}</b>（件数: ${selArea.count === '' || selArea.count == null ? '-' : selArea.count}）<br>`
@@ -2246,17 +2257,19 @@
                 + '<div style="display:flex; gap:8px; margin-bottom:12px;">'
                 + `<button class="choice-btn" style="flex:1; background:#eef3f6;" onclick="previewLendArea()">🗺 プレビュー</button>`;
             // 貸出中の区域 or 借りる人が未選択のときはグレーアウト＋無効化（style属性は1つにまとめる。重複すると効かない）
-            const lendOff = !!(selArea.user || !s.email);
+            const lendOff = !!(selArea.user || selArea.group || !s.email);
             html += `<button class="choice-btn" style="flex:1; ${lendOff ? 'background:#b9c2c8; border-color:#b9c2c8; color:#f0f0f0; cursor:not-allowed;' : 'background:#5E9DB8; border-color:#5E9DB8; color:#fff;'}" onclick="doLendArea()" ${lendOff ? 'disabled' : ''}>貸出する</button>`
                 + '</div>';
         }
-        const lent = lendState.areas.filter(a => a.user);
-        html += `<div style="font-weight:bold; border-top:1px solid #ddd; padding-top:8px;">貸出中の区域（${lent.length}）</div>`;
+        const lent = lendState.areas.filter(a => a.user || a.group);
+        html += `<div style="background:#f2f3f5; border-radius:6px; padding:8px; margin-top:8px;">`;
+        html += `<div style="font-weight:bold; padding-bottom:6px;">貸出中の区域（${lent.length}）</div>`;
         html += lent.length ? lent.map(a =>
-            `<div class="lend-row"><div class="grow"><b>${escHtml(a.area)}</b>　<span style="font-size:13px; color:#333;">${escHtml(a.name || uname(a.user))}</span><br>`
+            `<div class="lend-row"><div class="grow"><b>${escHtml(a.area)}</b>　<span style="font-size:13px; color:#333;">${escHtml(a.group ? a.group + '（グループ）' : (a.name || uname(a.user)))}</span><br>`
             + `<span style="font-size:12px; color:#666;">${escHtml(a.lendDate || '-')} → <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
             + `<button class="clear-btn" onclick="doReturnArea(${a.id}, '${escHtml(a.area)}')">返却</button></div>`
         ).join('') : '<div style="color:#888; padding:6px;">ありません</div>';
+        html += `</div>`;
         body.innerHTML = html;
     }
     // プレビュー: モーダルを一旦隠して地図で区域を確認 →「戻る」で選択状態のまま貸出画面へ
@@ -2274,13 +2287,19 @@
     function doLendArea() {
         const s = lendState.sel;
         const a = lendState.areas.find(x => String(x.id) === String(s.areaId));
-        const u = lendState.users.find(x => x.email === s.email);
-        if (!a || !u) return;
+        if (!a) return;
+        const isGroup = (s.email === '__GROUP__'); // 「グループ用」選択時はグループ全体へ貸出
+        const u = isGroup ? null : lendState.users.find(x => x.email === s.email);
+        if (!isGroup && !u) return;
         const due = (document.getElementById('lend-due') || {}).value || '';
-        appConfirm(`「${a.area}」を\n${u.name || u.email} さんに貸し出します。\n返却期日: ${due || '未設定'}`, { okLabel: '貸出する' }).then(ok => {
+        const whoLabel = isGroup ? `グループ「${s.group}」全体` : `${u.name || u.email} さん`;
+        appConfirm(`「${a.area}」を\n${whoLabel}に貸し出します。\n返却期日: ${due || '未設定'}`, { okLabel: '貸出する' }).then(ok => {
             if (!ok) return;
             showBusy('貸出中…');
-            apiCall('lendArea', { areaId: a.id, targetEmail: u.email, dueDate: due ? due.replace(/-/g, '/') : '' })
+            const params = isGroup
+                ? { areaId: a.id, targetGroup: s.group, dueDate: due ? due.replace(/-/g, '/') : '' }
+                : { areaId: a.id, targetEmail: u.email, dueDate: due ? due.replace(/-/g, '/') : '' };
+            apiCall('lendArea', params)
                 .then(d => {
                     lendState.users = d.users; lendState.areas = d.areas;
                     lendState.sel = { group: '', email: '', district: '', chome: '', areaId: '' }; // 次の貸出に備えて入力をクリア
