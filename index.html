@@ -240,8 +240,9 @@
         /* 階数・最大部屋数は常時リスト表示（size付き）。デフォルト選択でも先頭の 1・2 が隠れないようにする */
         select.numlist { height: auto; width: 100%; box-sizing: border-box; }
         body.large-ui .form-group select.numlist { padding: 2px !important; }
-        select.numlist option { padding: 5px 4px; text-align: center; }
-        body.large-ui select.numlist option { font-size: 16px !important; padding: 7px 4px; }
+        /* 階数「2階」(漢字)と最大部屋数「03」(数字)で行高がずれないよう line-height を固定して揃える */
+        select.numlist option { padding: 6px 4px; text-align: center; line-height: 1.7; }
+        body.large-ui select.numlist option { font-size: 16px !important; padding: 8px 4px; line-height: 1.7; }
         body.large-ui .submit-btn { padding: 10px 14px !important; font-size: 18px !important; }
         body.large-ui .clear-btn, body.large-ui .save-btn { font-size: 15px !important; padding: 6px 14px !important; }
         body.large-ui .history-box { font-size: 15px !important; }
@@ -854,6 +855,7 @@
         const btn = document.getElementById('legend-btn');
         if (panel.classList.contains('show') && !panel.contains(e.target) && e.target !== btn) {
             panel.classList.remove('show');
+            suppressMapTapUntil = Date.now() + 600; // 閉じた直後の地図タップ（新規登録）を抑止
         }
     });
 
@@ -1594,6 +1596,11 @@
             const p = m.getPopup();
             if (p && p.isOpen()) { resetRoomActionPanel(p); m.togglePopup(); closed = true; }
         });
+        // メニュー・凡例が開いていれば閉じる（範囲外タップでの登録の誤発火を防ぐ）
+        const menuP = document.getElementById('menu-panel');
+        const legendP = document.getElementById('legend-panel');
+        if (menuP && menuP.classList.contains('show')) { menuP.classList.remove('show'); closed = true; }
+        if (legendP && legendP.classList.contains('show')) { legendP.classList.remove('show'); closed = true; }
         return closed;
     }
 
@@ -1752,8 +1759,8 @@
                 </div>
                 <label style="font-size:11px; font-weight:bold;">緑=部屋あり（初期は全選択）。無い部屋をタップで外す</label>
                 <div id="setup-grid-container" style="max-height:120px; overflow:auto; margin-bottom:8px;"></div>
-                <div class="inline-group detail-only"><label>オートロック</label><select id="new-lock"><option value="なし">なし</option><option value="あり">あり</option></select></div>
-                <div class="inline-group detail-only"><label>管理人</label><select id="new-manager"><option value="なし">なし</option><option value="あり">あり</option></select></div>
+                <div class="inline-group detail-only"><label>オートロック</label><select id="new-lock"><option value="不明" selected>不明</option><option value="なし">なし</option><option value="あり">あり</option></select></div>
+                <div class="inline-group detail-only"><label>管理人</label><select id="new-manager"><option value="不明" selected>不明</option><option value="なし">なし</option><option value="あり">あり</option></select></div>
                 <div class="inline-group detail-only"><label>構成属性</label><select id="new-attribute"><option value="不明">不明</option><option value="ファミリー">ファミリー</option><option value="シングル">シングル</option><option value="混在">混在</option></select></div>
                 <div class="form-group memo-empty"><label>メモ</label><input type="text" id="new-memo"></div>
                 <button class="submit-btn" id="reg-btn" onclick="submitNewLocation(${latVal}, ${lngVal}, '集合住宅')">登録</button>
@@ -1840,7 +1847,7 @@
                 const roomNum = f * 100 + r;
                 const active = gridActiveRooms.includes(roomNum);
                 let label = hideNum ? cornerLabel(f, r, floors, maxRoom) : String(roomNum);
-                if (active && gridPersonalRooms.includes(roomNum)) label = '個人'; // 個人宅は数字を消して「個人」表示
+                if (active && gridPersonalRooms.includes(roomNum)) label = '🏠<span style="font-size:10px;">個人</span>'; // 個人宅は家アイコン＋小さく「個人」
                 html += `<td id="setup-rm-${roomNum}" style="min-width:40px; background:${active ? '#5FA97D' : '#fff'}; color:${active ? '#fff' : '#333'}; cursor:pointer;">${label}</td>`;
             }
             html += `</tr>`;
@@ -2131,7 +2138,7 @@
     document.addEventListener('click', (e) => {
         const p = document.getElementById('menu-panel');
         const b = document.getElementById('signout-btn');
-        if (p.classList.contains('show') && !p.contains(e.target) && e.target !== b) p.classList.remove('show');
+        if (p.classList.contains('show') && !p.contains(e.target) && e.target !== b) { p.classList.remove('show'); suppressMapTapUntil = Date.now() + 600; }
     });
 
     function openAppModal(title) {
@@ -2515,7 +2522,7 @@
                     const st = roomStatusMap[roomNum];
                     const v = roomVisual(st);
                     let label = (st === '訪問拒否' || st === '外国語') ? '☆' : (hideNum ? cornerLabel(f, r, floors, maxRoom) : String(roomNum));
-                    if (personalSet.has(roomNum)) label = '個人'; // 個人宅は数字を消して「個人」表示
+                    if (personalSet.has(roomNum)) label = '🏠<span style="font-size:10px;">個人</span>'; // 個人宅は家アイコン＋小さく「個人」
                     gridHtml += `<td class="cell-active" data-room="${roomNum}" style="min-width:40px; background:${v.bg}; color:${v.color};" onclick="showRoomAction(${first.rowNumber}, ${roomNum}, this)">${label}</td>`;
                 } else {
                     gridHtml += `<td class="cell-inactive"></td>`;
@@ -2573,8 +2580,8 @@
         const opt = (v, label, cur) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${label}</option>`;
         const floorOpts = [1,2,3,4,5,6,7,8,9,10].map(v => opt(v, v + '階', floors)).join('');
         const roomOpts = Array.from({length:20},(_,i)=>i+1).map(v => opt(v, String(v).padStart(2,'0'), maxRoom)).join('');
-        const lockOpts = ['なし','あり'].map(v => opt(v, v, lock)).join('');
-        const mgrOpts = ['なし','あり'].map(v => opt(v, v, item.管理人)).join('');
+        const lockOpts = ['不明','なし','あり'].map(v => opt(v, v, lock)).join('');
+        const mgrOpts = ['不明','なし','あり'].map(v => opt(v, v, item.管理人)).join('');
         const attrOpts = ['不明','ファミリー','シングル','混在'].map(v => opt(v, v, item.属性)).join('');
 
         const html = `
