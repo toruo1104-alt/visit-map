@@ -347,7 +347,7 @@
     const MY_TOKEN = 'pk.eyJ1IjoidG9ydW8xMTA0IiwiYSI6ImNtcTdlOGp2MzBhY3QycXBocno2OHQ5dmoifQ.bfkHvR5OmkacGJsDorHL5Q';
     mapboxgl.accessToken = MY_TOKEN;
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxiEMrMt8GJScqG9zyf_yO5EodLfJj_hKCRam_rC1yOriL4CNWDs7ykBrGWy5jcKVrD/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzJnhENJTQqJO_5FQeVTVH38-ITDppmWxzYXybr2SeuBKkxa1mTI5tqFeUyKqfW5tOD/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
     // ↓ 地図スタイル（Mapbox Studio のスタイルURL。標準に戻す場合は 'mapbox://styles/mapbox/streets-v12'）
@@ -618,6 +618,7 @@
     let currentMarkers = [];
     let activeNewMarker = null;
     let gridActiveRooms = [];
+    let gridPersonalRooms = []; // 登録/編集グリッドで「個人宅」マークを付けた部屋番号
     let currentData = []; // 直近にサーバーから受け取ったデータ（編集機能で参照）
 
     // 集合住宅ピンの色（構成属性で見分ける／落ち着いたトーン）
@@ -720,7 +721,7 @@
     /* ── 属性・訪問結果の選択UI（ネイティブselectの代替・ボタン式） ──
        視認性向上のため選択肢を最初からボタンで並べ、現在値を凡例と同系色でハイライトする。
        ・詳細/部屋操作: タップ＝即保存（従来のonchange相当）。保存後の再描画で新しい現在値が光る。
-       ・新規フォーム: タップ＝選択のみ（hidden input に値を保持し、登録ボタンで確定）＝pickNewChoice。 */
+       ・新規フォーム: タップした値で即登録（pickNewAndSubmit）。確定用「登録」ボタンは詳細表示内に控える。 */
     const ATTR_CHOICES = [
         { v: '通常',     roomV: '未訪問',   label: '訪問可', on: '#F2E394', onText: '#6b5a1e', offText: '#555' }, // 薄黄は白文字が読めないため濃黄土文字
         { v: '訪問拒否', roomV: '訪問拒否', label: '拒否',   on: '#A8554E', offText: '#A8554E' },
@@ -774,28 +775,11 @@
         grid.dataset.cur = btn.dataset.cur;
         btn.replaceWith(grid);
     }
-    // 新規フォーム用：タップで hidden input に値を入れ、表示を更新する
-    function pickNewChoice(inputId, val, btn) {
+    // 戸建て新規フォーム：訪問結果/属性ボタンを押した時点で、その値を hidden にセットして即登録する。
+    // 登録ボタンを押さずに反映する（属性・訪問結果のどちらでも可）。確定用の「登録」ボタンは
+    // 「詳細を表示」内に控える（メモを添えたい等のときに使う）。
+    function pickNewAndSubmit(inputId, val, lat, lng) {
         const input = document.getElementById(inputId);
-        if (input) input.value = val;
-        const grid = btn.closest('.choice-grid');
-        if (!grid) return;
-        if (grid.dataset.tpl) {
-            // 属性（現在値⇔展開式）: 選択したら現在値ボタンへ畳む
-            const wrap = document.createElement('div');
-            wrap.innerHTML = attrLineHtml(val, grid.dataset.tpl, grid.dataset.room === '1');
-            grid.replaceWith(wrap.firstElementChild);
-        } else {
-            // 訪問結果（常時3択表示）: ハイライトを付け替えるだけ
-            grid.querySelectorAll('.choice-btn').forEach(b => b.setAttribute('style', b.getAttribute('data-off')));
-            btn.setAttribute('style', btn.getAttribute('data-on'));
-        }
-    }
-
-    // 戸建て新規フォーム：訪問結果（不在/会えた/投函）を押した時点で即登録する。
-    // 属性は hidden(new-attribute-k)の現在値を一緒に送る。確定用の「登録」ボタンは「詳細を表示」内に控える。
-    function pickNewResult(val, lat, lng) {
-        const input = document.getElementById('new-status');
         if (input) input.value = val;
         submitNewLocation(lat, lng, '戸建て');
     }
@@ -1573,6 +1557,7 @@
     function handleMapClickOrTap(lngLat, forcedType) {
         if (activeNewMarker) activeNewMarker.remove();
         gridActiveRooms = [];
+        gridPersonalRooms = [];
 
         // 座標を100%数値型としてパース
         const latVal = parseFloat(lngLat.lat);
@@ -1586,10 +1571,10 @@
             formHtml += `
                 <div class="building-title">📍 戸建てを新規登録</div>
                 <input type="hidden" id="new-attribute-k" value="通常">
-                ${newAddrRowHtml(attrLineHtml('通常', "pickNewChoice('new-attribute-k','%v',this)", false))}
+                ${newAddrRowHtml(attrLineHtml('通常', `pickNewAndSubmit('new-attribute-k', '%v', ${latVal}, ${lngVal})`, false))}
                 <input type="hidden" id="new-status" value="不在">
                 <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">訪問結果（タップで登録）</div>
-                ${resultChoiceHtml('不在', `pickNewResult('%v', ${latVal}, ${lngVal})`)}
+                ${resultChoiceHtml('不在', `pickNewAndSubmit('new-status', '%v', ${latVal}, ${lngVal})`)}
                 <div class="form-group memo-empty"><label>メモ</label><textarea id="new-memo" rows="2"></textarea></div>
                 <button class="submit-btn detail-only" id="reg-btn" onclick="submitNewLocation(${latVal}, ${lngVal}, '戸建て')">登録</button>
                 <button class="detail-toggle" onclick="togglePopupDetail(this)">▼ 詳細を表示</button>
@@ -1680,6 +1665,14 @@
     }
 
     // gridActiveRooms の選択状態に従ってグリッドを描画
+    // 部屋番号非表示の集合住宅で、四隅の部屋に方角を表示する（番号が無いと位置の手がかりが無いため）。
+    // 上＝最上階／下＝最下階、左＝最小番号／右＝最大番号。単階・単室では上→左を優先して1ラベルに寄せる。
+    function cornerLabel(f, r, floors, maxRoom) {
+        const v = (f === floors) ? '上' : (f === 1) ? '下' : '';
+        const h = (r === 1) ? '左' : (r === maxRoom) ? '右' : '';
+        return (v && h) ? (h + v) : '';
+    }
+
     function renderRoomGrid() {
         const { floors, maxRoom } = getGridDims();
         const hideNum = isHideRoomNum();
@@ -1689,13 +1682,23 @@
             for (let r = 1; r <= maxRoom; r++) {
                 const roomNum = f * 100 + r;
                 const active = gridActiveRooms.includes(roomNum);
-                const label = hideNum ? '' : String(f * 100 + r);
-                html += `<td id="setup-rm-${roomNum}" onclick="toggleSetupRoom(${roomNum})" style="min-width:40px; background:${active ? '#5FA97D' : '#fff'}; color:${active ? '#fff' : '#333'}; cursor:pointer;">${label}</td>`;
+                let label = hideNum ? cornerLabel(f, r, floors, maxRoom) : String(roomNum);
+                if (active && gridPersonalRooms.includes(roomNum)) label = label ? label + '🏠' : '🏠'; // 個人宅マーク
+                html += `<td id="setup-rm-${roomNum}" style="min-width:40px; background:${active ? '#5FA97D' : '#fff'}; color:${active ? '#fff' : '#333'}; cursor:pointer;">${label}</td>`;
             }
             html += `</tr>`;
         }
         html += '</tbody></table></div>';
-        document.getElementById('setup-grid-container').innerHTML = html;
+        const container = document.getElementById('setup-grid-container');
+        container.innerHTML = html;
+        // 各セルにタップ（部屋の有無切替）と長押し（個人宅マークON/OFF）を割り当てる
+        for (let f = floors; f >= 1; f--) {
+            for (let r = 1; r <= maxRoom; r++) {
+                const rn = f * 100 + r;
+                const cell = document.getElementById(`setup-rm-${rn}`);
+                if (cell) attachLongPress(cell, () => toggleSetupRoom(rn), () => togglePersonalRoom(rn));
+            }
+        }
     }
 
     // 新規登録用: 全室を選択済みにして描画（不要な部屋をタップして外す運用）
@@ -1713,12 +1716,23 @@
         const el = document.getElementById(`setup-rm-${roomNum}`);
         const idx = gridActiveRooms.indexOf(roomNum);
         if (idx > -1) {
+            // 部屋を外す → その部屋の個人宅マークも一緒に解除（🏠を消すため再描画）
             gridActiveRooms.splice(idx, 1);
-            el.style.background = '#fff'; el.style.color = '#333';
+            const pi = gridPersonalRooms.indexOf(roomNum);
+            if (pi > -1) gridPersonalRooms.splice(pi, 1);
+            renderRoomGrid();
         } else {
             gridActiveRooms.push(roomNum);
             el.style.background = '#5FA97D'; el.style.color = '#fff';
         }
+    }
+
+    // 部屋のマスを長押し → 個人宅（大家さん等）マークをON/OFF。有効な部屋だけが対象。
+    function togglePersonalRoom(roomNum) {
+        if (!gridActiveRooms.includes(roomNum)) return; // 部屋が無い所はマークしない
+        const i = gridPersonalRooms.indexOf(roomNum);
+        if (i > -1) gridPersonalRooms.splice(i, 1); else gridPersonalRooms.push(roomNum);
+        renderRoomGrid(); // 🏠の付け外しを反映
     }
 
     function submitNewLocation(lat, lng, type) {
@@ -1743,6 +1757,7 @@
             data.attribute = document.getElementById('new-attribute').value;
             data.lock = document.getElementById('new-lock').value;
             data.hideRoomNum = isHideRoomNum();
+            data.personalRooms = gridPersonalRooms.filter(rn => gridActiveRooms.includes(rn)).join(',');
         }
 
         const btn = document.getElementById('reg-btn');
@@ -2324,6 +2339,8 @@
         let roomStatusMap = {};
         try { roomStatusMap = JSON.parse(first.部屋ステータス || '{}') || {}; } catch(e) { roomStatusMap = {}; }
         const hideNum = String(first.部屋番号非表示) === '1';
+        // 個人宅（V列の部屋番号リスト）→ セルに🏠を付ける集合
+        const personalSet = new Set(String(first.個人宅 || '').split(',').map(s => parseInt(s)).filter(n => !isNaN(n)));
         const memoText = cleanMemo(first);
         const memoCls = memoText.trim() ? '' : ' memo-empty'; // 空メモは簡易表示で隠す
 
@@ -2338,7 +2355,8 @@
                     // （番号はセルをタップすると下の操作欄に「XXX号室」として表示される）
                     const st = roomStatusMap[roomNum];
                     const v = roomVisual(st);
-                    const label = (st === '訪問拒否' || st === '外国語') ? '☆' : (hideNum ? '' : roomNum);
+                    let label = (st === '訪問拒否' || st === '外国語') ? '☆' : (hideNum ? cornerLabel(f, r, floors, maxRoom) : String(roomNum));
+                    if (personalSet.has(roomNum)) label = label ? label + '🏠' : '🏠'; // 個人宅マーク
                     gridHtml += `<td class="cell-active" data-room="${roomNum}" style="min-width:40px; background:${v.bg}; color:${v.color};" onclick="showRoomAction(${first.rowNumber}, ${roomNum}, this)">${label}</td>`;
                 } else {
                     gridHtml += `<td class="cell-inactive"></td>`;
@@ -2388,6 +2406,7 @@
         const maxRoom = parseInt(item.最大部屋番号) || 1;
         // 現在の有効部屋を選択状態に設定
         gridActiveRooms = String(item.有効部屋リスト || '').split(',').map(s => parseInt(s)).filter(n => !isNaN(n));
+        gridPersonalRooms = String(item.個人宅 || '').split(',').map(s => parseInt(s)).filter(n => !isNaN(n));
 
         const lock = getAutolock(item);
         const memoText = cleanMemo(item);
@@ -2452,7 +2471,8 @@
             attribute: document.getElementById('new-attribute').value,
             lock: document.getElementById('new-lock').value,
             memo: document.getElementById('new-memo').value,
-            hideRoomNum: isHideRoomNum()
+            hideRoomNum: isHideRoomNum(),
+            personalRooms: gridPersonalRooms.filter(rn => valid.includes(rn)).join(',')
         };
 
         btn.disabled = true; btn.innerText = '保存中...';
