@@ -171,8 +171,8 @@
         .go-pick-btn.cur { background: #3D7FA8; color: #fff; border-color: #3D7FA8; }
         #go-pick-cancel { display: block; width: 100%; margin-top: 12px; padding: 12px; font-size: 15px; border: 1px solid #ccc; border-radius: 6px; background: #eef1f4; cursor: pointer; }
         /* アイコン移動モードの振動（rotate個別プロパティ＝Mapboxの位置transformを保ちつつ回転） */
-        @keyframes marker-shake { 0%, 100% { rotate: -2deg; } 50% { rotate: 2deg; } }
-        .custom-marker.marker-shake { animation: marker-shake 0.13s ease-in-out infinite; z-index: 10000; }
+        @keyframes marker-shake { 0%, 100% { rotate: -1.2deg; } 50% { rotate: 1.2deg; } }
+        .custom-marker.marker-shake { animation: marker-shake 0.5s ease-in-out infinite; z-index: 10000; }
         /* 履歴の編集モーダル */
         #hist-edit-overlay { position: absolute; inset: 0; z-index: 10007; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; }
         #hist-edit-card { background: #fff; border-radius: 10px; padding: 18px; width: 88%; max-width: 340px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
@@ -1184,7 +1184,7 @@
         return `<div style="font-size:14px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
             + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}" style="cursor:pointer;" title="タップで番地を赤枠表示／長押しで「号」を設定">${escHtml(shown)}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressFor(${item.rowNumber})">住所を指定</button>`
-            + `<button class="save-btn" style="background:#4285F4; padding:3px 8px;" title="Googleマップでこの地点を開く" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${lat},${lng}','_blank')">🗺</button>`
+            + `<span style="cursor:pointer; padding:0 4px; font-size:17px;" title="Googleマップでこの地点を開く" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${lat},${lng}','_blank')">🗺</span>`
             + (attrHtml || '')
             + `</div>`;
     }
@@ -1509,22 +1509,50 @@
         }
     }
 
-    // マーカーを長押しすると「移動モード」（振動＋ドラッグ可能）に入り、ドラッグして離すと確認のうえ座標を保存する。
-    // 通常のタップ（吹き出し表示）と区別するため長押し(500ms)をトリガーにする。移動が無ければ6秒で自動解除。
+    // マーカーを長押しすると「移動モード」（振動）に入り、指を動かすとアイコンが追従し、離すと確認して座標を保存する。
+    // Mapbox標準のドラッグは長押し後の同一タッチでは効かないため、pointermoveで自前にマーカーを動かす。
+    // 通常タップ（吹き出し）と区別するため長押し(500ms)で起動。移動中は地図のパンと新規登録を止める。
     function enableMarkerDragOnLongPress(marker, el, rowNumber) {
-        let pressTimer = null, moveTimeout = null;
-        const enter = () => {
-            marker.setDraggable(true);
-            el.classList.add('marker-shake');
-            suppressMapTapUntil = Date.now() + 8000; // 移動モード中は地図の長押し（集合住宅登録）を抑止
-            showToast('ドラッグで移動 → 指を離して確定', false);
-            clearTimeout(moveTimeout);
-            moveTimeout = setTimeout(exit, 6000);
+        let pressTimer = null, moving = false, dragged = false;
+        const onMove = (cx, cy) => {
+            if (!moving) return;
+            dragged = true;
+            const rect = map.getContainer().getBoundingClientRect();
+            marker.setLngLat(map.unproject([cx - rect.left, cy - rect.top]));
         };
-        const exit = () => {
-            marker.setDraggable(false);
+        const onTM = (e) => { if (moving) { e.preventDefault(); const t = e.touches[0]; if (t) onMove(t.clientX, t.clientY); } };
+        const onMM = (e) => onMove(e.clientX, e.clientY);
+        const finishMove = () => {
+            if (!moving) return;
+            moving = false;
             el.classList.remove('marker-shake');
-            clearTimeout(moveTimeout);
+            map.dragPan.enable();
+            document.removeEventListener('touchmove', onTM);
+            document.removeEventListener('touchend', finishMove);
+            document.removeEventListener('mousemove', onMM);
+            document.removeEventListener('mouseup', finishMove);
+            suppressMapTapUntil = Date.now() + 1000; // 離した直後の地図タップ（新規登録）を抑止
+            if (!dragged) return; // 動かさず離した → 何もしない
+            const ll = marker.getLngLat();
+            appConfirm('このピンをここへ移動しますか？', { okLabel: '移動する' }).then(ok => {
+                if (!ok) { renderMarkers(currentData); return; } // キャンセル → 元の位置へ戻す
+                showBusy('移動中…');
+                apiCall('updateCoords', { rowNumber: rowNumber, lat: ll.lat, lng: ll.lng })
+                    .then(latest => { showToast('移動しました', false); renderMarkers(latest); })
+                    .catch(err => { handleServerError(err); renderMarkers(currentData); })
+                    .finally(hideBusy);
+            });
+        };
+        const enter = () => {
+            moving = true; dragged = false;
+            el.classList.add('marker-shake');
+            map.dragPan.disable();                    // 移動中は地図がパンしないように
+            suppressMapTapUntil = Date.now() + 30000; // 移動モード中は地図の長押し/タップ（新規登録）を抑止
+            showToast('指で動かして移動 → 離して確定', false);
+            document.addEventListener('touchmove', onTM, { passive: false });
+            document.addEventListener('touchend', finishMove);
+            document.addEventListener('mousemove', onMM);
+            document.addEventListener('mouseup', finishMove);
         };
         const startPress = (e) => { if (e && e.stopPropagation) e.stopPropagation(); clearTimeout(pressTimer); pressTimer = setTimeout(enter, 500); };
         const cancelPress = () => clearTimeout(pressTimer);
@@ -1534,19 +1562,6 @@
         el.addEventListener('mousedown', startPress);
         el.addEventListener('mouseup', cancelPress);
         el.addEventListener('mouseleave', cancelPress);
-        marker.on('dragstart', () => clearTimeout(moveTimeout));
-        marker.on('dragend', () => {
-            const ll = marker.getLngLat();
-            exit();
-            appConfirm('このピンをここへ移動しますか？', { okLabel: '移動する' }).then(ok => {
-                if (!ok) { renderMarkers(currentData); return; } // キャンセル → 元の位置へ戻す
-                showBusy('移動中…');
-                apiCall('updateCoords', { rowNumber: rowNumber, lat: ll.lat, lng: ll.lng })
-                    .then(latest => { showToast('移動しました', false); renderMarkers(latest); })
-                    .catch(err => { handleServerError(err); renderMarkers(currentData); })
-                    .finally(hideBusy);
-            });
-        });
     }
 
     map.on('load', () => { /* データ取得はサインイン成功後（handleCredential）に行う */ });
