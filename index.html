@@ -62,9 +62,9 @@
         #google-btn { min-height: 44px; }
         #login-note { font-size: 11px; color: #999; margin-top: 16px; max-width: 320px; line-height: 1.5; }
         /* 下部ボタン群（サインアウト=左下、凡例=左下隣、文字サイズ=右下） */
-        #signout-btn { position: absolute; bottom: 10px; left: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        #legend-btn  { position: absolute; bottom: 10px; left: 110px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        #area-nav-btn { position: absolute; bottom: 10px; left: 164px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        #signout-btn { position: absolute; bottom: 10px; left: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 8px 13px; font-size: 13px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        #legend-btn  { position: absolute; bottom: 10px; left: 128px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 8px 13px; font-size: 13px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        #area-nav-btn { position: absolute; bottom: 10px; left: 200px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 8px 13px; font-size: 13px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
         /* 住所で移動モーダル */
         #area-modal { position: absolute; inset: 0; z-index: 10002; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; padding: 16px; }
@@ -134,7 +134,7 @@
             filter: drop-shadow(0 1px 2.5px rgba(0,0,0,0.55)); }
 
         /* ── 文字サイズボタン（右下） ── */
-        #scale-btn { position: absolute; bottom: 10px; right: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 6px 10px; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        #scale-btn { position: absolute; bottom: 10px; right: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 8px 13px; font-size: 13px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
         /* ── 凡例パネル ── */
         #legend-panel { position: absolute; bottom: 42px; left: 10px; z-index: 9997; background: rgba(255,255,255,0.97); border: 1px solid #ccc; border-radius: 8px; padding: 8px 12px; font-size: 11px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); display: none; min-width: 180px; max-height: 80vh; overflow-y: auto; }
@@ -162,6 +162,14 @@
         /* 更新中の操作ブロック用オーバーレイ（クリックを吸収して操作不可にする） */
         /* busy はモーダル類（住所10002・管理10003・確認10005）より上＝どの画面の操作でも見える最前面に置く */
         #busy-overlay { position: absolute; inset: 0; z-index: 10006; background: rgba(0,0,0,0.06); display: none; cursor: progress; }
+        /* 住所の「号」選択モーダル */
+        #go-pick-overlay { position: absolute; inset: 0; z-index: 10007; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; }
+        #go-pick-card { background: #fff; border-radius: 10px; padding: 16px; width: 88%; max-width: 360px; max-height: 80vh; overflow: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        #go-pick-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; text-align: center; }
+        #go-pick-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+        .go-pick-btn { padding: 12px 0; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; background: #f7f7f7; cursor: pointer; }
+        .go-pick-btn.cur { background: #3D7FA8; color: #fff; border-color: #3D7FA8; }
+        #go-pick-cancel { display: block; width: 100%; margin-top: 12px; padding: 12px; font-size: 15px; border: 1px solid #ccc; border-radius: 6px; background: #eef1f4; cursor: pointer; }
         #busy-indicator { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10007; background: rgba(44,62,80,0.92); color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 14px; display: none; align-items: center; gap: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
         #busy-indicator .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: busy-spin 0.7s linear infinite; }
         @keyframes busy-spin { to { transform: rotate(360deg); } }
@@ -221,6 +229,11 @@
         body.large-ui .form-group input, body.large-ui .form-group select, body.large-ui .form-group textarea { font-size: 17px !important; padding: 9px !important; }
         body.large-ui .inline-group label { font-size: 16px !important; }
         body.large-ui .inline-group select { font-size: 17px !important; padding: 9px !important; }
+        /* 階数・最大部屋数は常時リスト表示（size付き）。デフォルト選択でも先頭の 1・2 が隠れないようにする */
+        select.numlist { height: auto; }
+        body.large-ui .form-group select.numlist { padding: 2px !important; }
+        select.numlist option { padding: 5px 4px; text-align: center; }
+        body.large-ui select.numlist option { font-size: 16px !important; padding: 7px 4px; }
         body.large-ui .submit-btn { padding: 10px 14px !important; font-size: 18px !important; }
         body.large-ui .clear-btn, body.large-ui .save-btn { font-size: 15px !important; padding: 6px 14px !important; }
         body.large-ui .history-box { font-size: 15px !important; }
@@ -259,7 +272,7 @@
     <div id="login-note">サインインできない場合は、管理者にこのアプリのスプレッドシートへの共有を依頼してください。</div>
 </div>
 
-<button id="scale-btn"  onclick="toggleScale()"  style="display:none;">アイコン：標準</button>
+<button id="scale-btn"  onclick="toggleScale()"  style="display:none;">小</button>
 <button id="signout-btn" onclick="toggleMenu()" style="display:none;">☰ メニュー</button>
 
 <!-- メニューパネル（割り当て区域／管理機能／サインアウト。管理項目は admin のみ表示） -->
@@ -466,7 +479,7 @@
 
     // 現在のアイコンサイズに応じてボタン表示を更新
     function updateScaleBtnText() {
-        const t = document.body.classList.contains('icon-large') ? 'アイコン：大' : 'アイコン：標準';
+        const t = document.body.classList.contains('icon-large') ? '大' : '小';
         document.getElementById('scale-btn').textContent = t;
     }
 
@@ -1161,7 +1174,7 @@
         const lng = parseFloat(item.経度), lat = parseFloat(item.緯度);
         const shown = stored || '判定中…';
         return `<div style="font-size:14px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
-            + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}" style="cursor:pointer;" title="タップで番地を赤枠表示" onclick="outlineAddrForPin(${item.rowNumber})">${escHtml(shown)}</span>`
+            + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}" style="cursor:pointer;" title="タップで番地を赤枠表示／長押しで「号」を設定">${escHtml(shown)}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressFor(${item.rowNumber})">住所を指定</button>`
             + (attrHtml || '')
             + `</div>`;
@@ -1188,6 +1201,14 @@
             const a = deriveAddress(parseFloat(el.dataset.lng), parseFloat(el.dataset.lat));
             el.textContent = a ? a : (addrPoints ? '（住所判定不可）' : '判定中…');
         });
+        // 住所表示にタップ（番地を赤枠表示）と長押し（「号」を設定）を割り当てる
+        rootEl.querySelectorAll('.derived-addr').forEach(el => {
+            if (el._goBound) return;
+            const rn = parseInt(String(el.id).replace('addr-text-', ''));
+            if (!rn) return;
+            el._goBound = true;
+            attachLongPress(el, () => outlineAddrForPin(rn), () => pickGoForPin(rn));
+        });
     }
     // 既存ピンの住所を指定（ピッカーを開く→選択で保存）
     function pickAddressFor(rowNumber) {
@@ -1210,10 +1231,44 @@
             if (el) el.textContent = addr;
         });
     }
+    // 住所の「号」を選ぶモーダル（なし＋1〜50）。cb(go) で選択値（''=なし）を返す。Esc/枠外で閉じる。
+    function pickGoNumber(curGo, cb) {
+        let ov = document.getElementById('go-pick-overlay');
+        if (!ov) { ov = document.createElement('div'); ov.id = 'go-pick-overlay'; document.body.appendChild(ov); }
+        let g = `<button class="go-pick-btn${!curGo ? ' cur' : ''}" data-go="">なし</button>`;
+        for (let i = 1; i <= 50; i++) g += `<button class="go-pick-btn${String(i) === String(curGo) ? ' cur' : ''}" data-go="${i}">${i}</button>`;
+        ov.innerHTML = `<div id="go-pick-card"><div id="go-pick-title">「号」を選んでください</div><div id="go-pick-grid">${g}</div><button id="go-pick-cancel">キャンセル</button></div>`;
+        ov.style.display = 'flex';
+        const close = () => { ov.style.display = 'none'; document.removeEventListener('keydown', onKey, true); };
+        const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+        document.addEventListener('keydown', onKey, true);
+        ov.onclick = (e) => { if (e.target === ov) close(); };
+        ov.querySelectorAll('.go-pick-btn').forEach(b => { b.onclick = () => { close(); cb(b.dataset.go); }; });
+        document.getElementById('go-pick-cancel').onclick = close;
+    }
+    // 既存ピンの住所に「号」を設定（番地部分は維持し、号だけ差し替え）
+    function pickGoForPin(rn) {
+        const item = currentData.find(d => d.rowNumber === rn);
+        if (!item) return;
+        let base = (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? item.住所 : (deriveAddress(parseFloat(item.経度), parseFloat(item.緯度)) || '');
+        base = addrWithoutGo(base);
+        if (!base) { showToast('先に番地を表示してください', true); return; }
+        pickGoNumber(addrGoOf(item.住所), go => saveAddressFor(rn, addrWithGo(base, go)));
+    }
+    // 新規登録フォームの住所に「号」を設定
+    function pickGoForNew() {
+        let base = addrWithoutGo(newPinAddress || deriveAddress(newPinLng, newPinLat) || '');
+        if (!base) { showToast('先に番地を指定してください', true); return; }
+        pickGoNumber(addrGoOf(newPinAddress), go => {
+            newPinAddress = addrWithGo(base, go);
+            const el = document.getElementById('new-addr-text');
+            if (el) el.textContent = newPinAddress;
+        });
+    }
     // 新規登録フォームに入れる「住所」行。attrHtml: 戸建てで右側に置く属性の現在値ボタン
     function newAddrRowHtml(attrHtml) {
         return `<div style="font-size:14px; color:#555; margin:-2px 0 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
-            + `🏠 <span id="new-addr-text" style="cursor:pointer;" title="タップで番地を赤枠表示" onclick="outlineNewAddr()">${escHtml(newPinAddress || '（住所未指定）')}</span>`
+            + `🏠 <span id="new-addr-text" style="cursor:pointer;" title="タップで番地を赤枠表示／長押しで「号」を設定">${escHtml(newPinAddress || '（住所未指定）')}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressForNew()">住所を指定</button>`
             + (attrHtml || '')
             + `</div>`;
@@ -1292,6 +1347,32 @@
         }
         if (nb && distM(lng, lat, nb.x, nb.y) <= 400) return nb.a;
         return null;
+    }
+
+    /* ── 住所の「号」ヘルパー ── 住所(E列)は「○○3丁目5番」または「○○3丁目5番16号」。
+       号は末尾の「M号」で表す。街区検索・?area は番地部分だけを使う（号は表示・記録用）。 */
+    function addrWithoutGo(addr) { return String(addr || '').replace(/\d+号\s*$/, '').trim(); }
+    function addrWithGo(banchi, go) { banchi = addrWithoutGo(banchi); return (go ? banchi + go + '号' : banchi); }
+    function addrGoOf(addr) { const m = String(addr || '').match(/(\d+)号\s*$/); return m ? m[1] : ''; }
+
+    /* アイコン位置から最寄りの「号」(住居番号)を Mapbox から取得する。
+       mapbox-streets-v8 の housenum_label ソースレイヤーを Tilequery API で照会し、最も近い house_num を返す。
+       データが無い地域では null（その場合は番地のみ＝手動の「号」設定に委ねる）。 */
+    function fetchNearestHouseNum(lng, lat) {
+        const url = 'https://api.mapbox.com/v4/mapbox.mapbox-streets-v8/tilequery/'
+            + lng + ',' + lat + '.json?radius=25&limit=10&dedupe&layers=housenum_label&access_token='
+            + encodeURIComponent(mapboxgl.accessToken);
+        return fetch(url).then(r => r.json()).then(d => {
+            let best = null;
+            ((d && d.features) || []).forEach(f => {
+                const p = f.properties || {};
+                const hn = (p.house_num != null && p.house_num !== '') ? String(p.house_num) : '';
+                if (!hn || !/^\d+$/.test(hn)) return; // 数字の号だけ扱う（"1-2" 等は対象外）
+                const dist = (p.tilequery && typeof p.tilequery.distance === 'number') ? p.tilequery.distance : Infinity;
+                if (!best || dist < best.dist) best = { num: hn, dist: dist };
+            });
+            return best ? best.num : null;
+        }).catch(() => null);
     }
     function boxFeature(center) {
         const lng = center[0], lat = center[1], half = 35; // 約70m四方
@@ -1564,6 +1645,13 @@
         const lngVal = parseFloat(lngLat.lng);
         // タップ地点から住所を逆算して初期値に（「住所を指定」で手動上書きも可）
         newPinAddress = deriveAddress(lngVal, latVal) || '';
+        // 最寄りの「号」(住居番号)を Mapbox から取得して住所に付加（取れなければ番地のみ。手動でも設定可）
+        if (newPinAddress) fetchNearestHouseNum(lngVal, latVal).then(go => {
+            if (!go || addrGoOf(newPinAddress)) return;       // 取れない／既に号があるなら何もしない
+            newPinAddress = addrWithGo(newPinAddress, go);
+            const el = document.getElementById('new-addr-text');
+            if (el) el.textContent = newPinAddress;
+        });
         newPinLng = lngVal; newPinLat = latVal; // 住所タップで赤枠表示するため新規地点の座標を保持
 
         let formHtml = `<div class="popup-content">`;
@@ -1586,10 +1674,10 @@
                 <div class="form-group"><label>建物名</label><input type="text" id="new-name" placeholder="例：ハイツ小岩" style="background:#FFF9DD;"></div>
                 <div class="form-row" style="display:flex; gap:4px;">
                     <div class="form-group" style="flex:1;"><label>階数</label>
-                        <select id="new-floors" onchange="generateSetupGrid()" style="background:#FFF9DD;">${[1,2,3,4,5,6,7,8,9,10].map(v=>`<option value="${v}" ${v===2?'selected':''}>${v}階</option>`).join('')}</select>
+                        <select id="new-floors" class="numlist" size="6" onchange="generateSetupGrid()" style="background:#FFF9DD;">${[1,2,3,4,5,6,7,8,9,10].map(v=>`<option value="${v}" ${v===2?'selected':''}>${v}階</option>`).join('')}</select>
                     </div>
                     <div class="form-group" style="flex:1;"><label>最大部屋数</label>
-                        <select id="new-maxroom" onchange="generateSetupGrid()" style="background:#FFF9DD;">${Array.from({length:20},(_,i)=>i+1).map(v=>`<option value="${v}" ${v===3?'selected':''}>${String(v).padStart(2,'0')}</option>`).join('')}</select>
+                        <select id="new-maxroom" class="numlist" size="6" onchange="generateSetupGrid()" style="background:#FFF9DD;">${Array.from({length:20},(_,i)=>i+1).map(v=>`<option value="${v}" ${v===3?'selected':''}>${String(v).padStart(2,'0')}</option>`).join('')}</select>
                     </div>
                 </div>
                 <div class="form-group" style="margin:2px 0;">
@@ -1611,7 +1699,11 @@
 
         const popup = new mapboxgl.Popup({ offset: 25, closeOnClick: false, maxWidth: 'none', anchor: 'bottom', focusAfterOpen: false }).setHTML(formHtml);
         // 新規フォームの吹き出しも「上端基準」で画面に収める（開いた直後に実高さを測る）
-        popup.on('open', () => fitPopupInView(activeNewMarker, 0));
+        popup.on('open', () => {
+            fitPopupInView(activeNewMarker, 0);
+            const el = document.getElementById('new-addr-text');
+            if (el && !el._goBound) { el._goBound = true; attachLongPress(el, () => outlineNewAddr(), () => pickGoForNew()); }
+        });
         activeNewMarker = new mapboxgl.Marker({ color: forcedType === '戸建て' ? '#E0A93C' : '#C75F56' })
             .setLngLat([lngVal, latVal])
             .setPopup(popup)
@@ -1683,7 +1775,7 @@
                 const roomNum = f * 100 + r;
                 const active = gridActiveRooms.includes(roomNum);
                 let label = hideNum ? cornerLabel(f, r, floors, maxRoom) : String(roomNum);
-                if (active && gridPersonalRooms.includes(roomNum)) label = label ? label + '🏠' : '🏠'; // 個人宅マーク
+                if (active && gridPersonalRooms.includes(roomNum)) label = '個人'; // 個人宅は数字を消して「個人」表示
                 html += `<td id="setup-rm-${roomNum}" style="min-width:40px; background:${active ? '#5FA97D' : '#fff'}; color:${active ? '#fff' : '#333'}; cursor:pointer;">${label}</td>`;
             }
             html += `</tr>`;
@@ -2356,7 +2448,7 @@
                     const st = roomStatusMap[roomNum];
                     const v = roomVisual(st);
                     let label = (st === '訪問拒否' || st === '外国語') ? '☆' : (hideNum ? cornerLabel(f, r, floors, maxRoom) : String(roomNum));
-                    if (personalSet.has(roomNum)) label = label ? label + '🏠' : '🏠'; // 個人宅マーク
+                    if (personalSet.has(roomNum)) label = '個人'; // 個人宅は数字を消して「個人」表示
                     gridHtml += `<td class="cell-active" data-room="${roomNum}" style="min-width:40px; background:${v.bg}; color:${v.color};" onclick="showRoomAction(${first.rowNumber}, ${roomNum}, this)">${label}</td>`;
                 } else {
                     gridHtml += `<td class="cell-inactive"></td>`;
@@ -2423,10 +2515,10 @@
             <div class="form-group"><label>建物名</label><input type="text" id="new-name" value="${escHtml(item['建物名 / 世帯名'] || '')}" style="background:#FFF9DD;"></div>
             <div class="form-row" style="display:flex; gap:4px;">
                 <div class="form-group" style="flex:1;"><label>階数</label>
-                    <select id="new-floors" onchange="renderRoomGrid()" style="background:#FFF9DD;">${floorOpts}</select>
+                    <select id="new-floors" class="numlist" size="6" onchange="renderRoomGrid()" style="background:#FFF9DD;">${floorOpts}</select>
                 </div>
                 <div class="form-group" style="flex:1;"><label>最大部屋数</label>
-                    <select id="new-maxroom" onchange="renderRoomGrid()" style="background:#FFF9DD;">${roomOpts}</select>
+                    <select id="new-maxroom" class="numlist" size="6" onchange="renderRoomGrid()" style="background:#FFF9DD;">${roomOpts}</select>
                 </div>
             </div>
             <div class="form-group" style="margin:2px 0;">
