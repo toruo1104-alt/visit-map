@@ -414,6 +414,12 @@
         const blocksReady = loadBlocks(); // 街区ポリゴン(blocks.geojson)を先読み
         loadAddrPoints();  // 番地代表点(address_points.json)を先読み（住所の逆算用）
         loadDataFromSheet();
+        // 起動時に現在地へ寄せる（現在地ボタンを基本オンに）。?area/?pin のディープリンク時はそちらを優先。
+        if (!DEEP_LINK_AREA && !DEEP_LINK_PIN && !didAutoGeolocate) {
+            didAutoGeolocate = true;
+            const triggerGeo = () => { try { geolocateControl.trigger(); } catch (e) {} };
+            if (map.loaded()) triggerGeo(); else map.once('load', triggerGeo);
+        }
         // 外部リンク(?area=...)で来た場合は、地図と街区データの準備後にその番地を表示する
         if (DEEP_LINK_AREA && !deepLinkDone) {
             deepLinkDone = true;
@@ -503,6 +509,7 @@
         ME = { email: '', name: '', group: '', isAdmin: false };
         closeAreaNav();
         clearBanchiBox();
+        didAutoGeolocate = false; // 次回サインイン時にまた現在地へ寄せる
         document.getElementById('area-label').style.display = 'none';
         document.getElementById('login-overlay').classList.remove('hidden');
     }
@@ -541,6 +548,7 @@
     const DEEP_LINK_AREA = _urlParams.get('area');
     const DEEP_LINK_PIN = _urlParams.get('pin');
     let deepLinkDone = false, deepLinkPinDone = false;
+    let didAutoGeolocate = false; // 起動時の現在地フォーカスを1回だけ行うためのフラグ
 
     /* ── 表示位置の保存・復元（Androidのタブ破棄対策） ──
        スマホのブラウザはメモリ不足時にタブを破棄し、戻ると全リロード＝初期位置に戻ってしまう。
@@ -782,6 +790,14 @@
             grid.querySelectorAll('.choice-btn').forEach(b => b.setAttribute('style', b.getAttribute('data-off')));
             btn.setAttribute('style', btn.getAttribute('data-on'));
         }
+    }
+
+    // 戸建て新規フォーム：訪問結果（不在/会えた/投函）を押した時点で即登録する。
+    // 属性は hidden(new-attribute-k)の現在値を一緒に送る。確定用の「登録」ボタンは「詳細を表示」内に控える。
+    function pickNewResult(val, lat, lng) {
+        const input = document.getElementById('new-status');
+        if (input) input.value = val;
+        submitNewLocation(lat, lng, '戸建て');
     }
 
     // 広域表示（ズームがこの値未満）のときは戸建てを隠す
@@ -1572,10 +1588,10 @@
                 <input type="hidden" id="new-attribute-k" value="通常">
                 ${newAddrRowHtml(attrLineHtml('通常', "pickNewChoice('new-attribute-k','%v',this)", false))}
                 <input type="hidden" id="new-status" value="不在">
-                <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">訪問結果</div>
-                ${resultChoiceHtml('不在', "pickNewChoice('new-status','%v',this)")}
+                <div style="font-weight:bold; font-size:14px; margin:2px 0 4px;">訪問結果（タップで登録）</div>
+                ${resultChoiceHtml('不在', `pickNewResult('%v', ${latVal}, ${lngVal})`)}
                 <div class="form-group memo-empty"><label>メモ</label><textarea id="new-memo" rows="2"></textarea></div>
-                <button class="submit-btn" id="reg-btn" onclick="submitNewLocation(${latVal}, ${lngVal}, '戸建て')">登録</button>
+                <button class="submit-btn detail-only" id="reg-btn" onclick="submitNewLocation(${latVal}, ${lngVal}, '戸建て')">登録</button>
                 <button class="detail-toggle" onclick="togglePopupDetail(this)">▼ 詳細を表示</button>
             `;
         } else {
