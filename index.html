@@ -1215,7 +1215,6 @@
         const shown = stored || '判定中…';
         return `<div style="font-size:14px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
             + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}" style="cursor:pointer;" title="タップで番地を赤枠表示／長押しで住所を指定">${escHtml(shown)}</span>`
-            + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressFor(${item.rowNumber})">住所を指定</button>`
             + `<span style="cursor:pointer; padding:0 4px; font-size:17px;" title="Googleマップでこの地点を開く" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${lat},${lng}','_blank')">🗺</span>`
             + (attrHtml || '')
             + `</div>`;
@@ -1310,7 +1309,6 @@
     function newAddrRowHtml(attrHtml) {
         return `<div style="font-size:14px; color:#555; margin:-2px 0 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
             + `🏠 <span id="new-addr-text" style="cursor:pointer;" title="タップで番地を赤枠表示／長押しで住所を指定">${escHtml(newPinAddress || '（住所未指定）')}</span>`
-            + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressForNew()">住所を指定</button>`
             + (attrHtml || '')
             + `</div>`;
     }
