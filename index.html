@@ -266,6 +266,8 @@
         /* ── 表示の重なり順：吹き出し(50) ＞ GPS青ポチ(5) ＞ 訪問先ピン(3) ──
               ピンには動的にz-indexが付くことがあるため !important で固定して青ポチを前面に保つ */
         .mapboxgl-popup { z-index: 50 !important; } /* 吹き出しは常に最前面 */
+        /* 吹き出しの縁を年長者にも分かりやすく（枠線＋少し強めの影。やり過ぎない範囲で境界を明確化） */
+        .mapboxgl-popup-content { border: 1.5px solid #b3bfc8; border-radius: 8px; box-shadow: 0 3px 14px rgba(0,0,0,0.20); }
         .custom-marker { z-index: 3 !important; }   /* 訪問先ピン */
         /* ── GPS現在地（青ポチ）：ピンより前面、ただしクリックは透過してピン操作を邪魔しない ── */
         .mapboxgl-user-location-dot { z-index: 5 !important; pointer-events: none !important; width: 11px !important; height: 11px !important; }
@@ -292,7 +294,6 @@
 <!-- メニューパネル（割り当て区域／管理機能／サインアウト。管理項目は admin のみ表示） -->
 <div id="menu-panel">
     <button class="menu-item" onclick="closeMenu(); showMyAreas();">📋 割り当て区域</button>
-    <button class="menu-item" onclick="closeMenu(); reloadApp();">🔄 最新の状態に更新</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showLendScreen();">🗂 区域の貸出・返却</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showUserAdmin();">👥 ユーザー管理</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showMaintenance();">🧹 メンテナンス</button>
@@ -377,7 +378,7 @@
     const MY_TOKEN = 'pk.eyJ1IjoidG9ydW8xMTA0IiwiYSI6ImNtcTdlOGp2MzBhY3QycXBocno2OHQ5dmoifQ.bfkHvR5OmkacGJsDorHL5Q';
     mapboxgl.accessToken = MY_TOKEN;
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxZprMzW1K-zR6gxcK00vVjU93mCvwvgDcE7Ak1hA9cvP-WcxLsUw5mLJC53Wj0V9av/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzKSVQGBBoS7Ewzq-7K-4_vXG0EiojXWov7NOtChvheBFMonPDbaLc7D8DXL_bpoux6/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
     // ↓ 地図スタイル（Mapbox Studio のスタイルURL。標準に戻す場合は 'mapbox://styles/mapbox/streets-v12'）
@@ -627,6 +628,23 @@
         fitBoundsOptions: { maxZoom: 18 }
     });
     map.addControl(geolocateControl, 'top-right');
+    // 「最新の状態に更新」ボタンを現在地ボタンの真下（同じ右上グループ）に置く。PWAはブラウザ更新UIが無いための救済。
+    map.addControl({
+        onAdd: function () {
+            const div = document.createElement('div');
+            div.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.title = '最新の状態に更新';
+            btn.setAttribute('aria-label', '最新の状態に更新');
+            btn.style.fontSize = '17px';
+            btn.textContent = '🔄';
+            btn.addEventListener('click', reloadApp);
+            div.appendChild(btn);
+            return div;
+        },
+        onRemove: function () {}
+    }, 'top-right');
     /* GeolocateControl は位置更新のたびに「GPS精度の円が収まるズーム」へ自動で再フィットする。
        精度が粗いと大きく引いてしまい、こちらの zoom 21 を上書きするので、
        追従中は毎回 21 に補正して固定する（初回は住所検索と同じ flyTo、以降は素早い easeTo）。 */
@@ -2556,46 +2574,52 @@
         openAppModal('👥 ユーザー管理');
         showBusy('読み込み中…');
         apiCall('getUsers', {}).then(list => {
-            userAdminState = (list || []).map(u => ({ email: u.email, name: u.name, role: u.role, group: u.group }));
+            userAdminState = (list || []).map(u => ({ email: u.email, name: u.name, role: u.role, group: u.group, active: u.active !== false }));
             renderUserAdmin();
         }).catch(handleServerError).finally(hideBusy);
     }
     function renderUserAdmin() {
         const body = document.getElementById('app-modal-body');
-        let html = '<div style="font-size:12px; color:#666; margin-bottom:8px;">保存すると、この一覧の内容で<b>スプレッドシートの共有も更新</b>されます（追加=招待・削除=解除）。</div>';
+        let html = '<div style="font-size:12px; color:#666; margin-bottom:8px;">保存すると、この一覧の内容で<b>スプレッドシートの共有も更新</b>されます（追加=招待・削除=解除）。<br><b>無効</b>＝行は残したまま<b>アプリのログインだけ拒否</b>（共有はそのまま。いつでも有効に戻せます）。</div>';
         html += userAdminState.map((u, i) => {
-            // オーナーはメール変更・降格・削除を不可にする（漢字名・グループは編集可。サーバー側でも検証している）
+            // オーナーはメール変更・降格・削除・無効化を不可にする（漢字名・グループは編集可。サーバー側でも検証している）
             const isOwner = !!(ME.owner && String(u.email).trim().toLowerCase() === ME.owner);
-            if (isOwner) u.role = 'admin'; // 表示と送信値を一致させる（シート手編集で崩れていても矯正）
+            if (isOwner) { u.role = 'admin'; u.active = true; } // 表示と送信値を一致させる（シート手編集で崩れていても矯正）
+            const inactive = (u.active === false);
             const emailAttrs = isOwner
                 ? 'readonly style="flex:2; min-width:170px; font-size:13px; padding:6px; background:#f0f0f0; color:#777;"'
                 : 'style="flex:2; min-width:170px; font-size:13px; padding:6px;" onchange="userAdminState[' + i + '].email = this.value"';
+            // 有効/無効（オーナーは常に有効・切替不可）。無効選択時は赤字＋行を淡色化
+            const statusControl = isOwner
+                ? ''
+                : `<select style="font-size:13px; padding:6px; ${inactive ? 'color:#C75F56; font-weight:bold;' : ''}" onchange="userAdminState[${i}].active = (this.value === '1'); renderUserAdmin();"><option value="1" ${!inactive ? 'selected' : ''}>有効</option><option value="0" ${inactive ? 'selected' : ''}>無効</option></select>`;
             const roleControl = isOwner
                 ? '<span style="font-size:12px; color:#B0763C; font-weight:bold; padding:6px 2px; white-space:nowrap;">👑 オーナー（管理者）</span>'
                 : `<select style="font-size:13px; padding:6px;" onchange="userAdminState[${i}].role = this.value"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>一般</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>管理者</option></select>`
                   + `<button class="clear-btn" onclick="userAdminState.splice(${i}, 1); renderUserAdmin();">削除</button>`;
-            return `<div class="lend-row user-row" style="flex-wrap:wrap;">`
+            return `<div class="lend-row user-row" style="flex-wrap:wrap; ${inactive ? 'opacity:0.6; background:#f1f2f4;' : ''}">`
                 + `<input ${emailAttrs} placeholder="メールアドレス" value="${escHtml(u.email)}">`
                 + `<input style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="漢字名" value="${escHtml(u.name)}" onchange="userAdminState[${i}].name = this.value">`
                 + `<input style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="グループ" value="${escHtml(u.group)}" onchange="userAdminState[${i}].group = this.value">`
+                + statusControl
                 + roleControl
                 + `</div>`;
         }).join('');
         html += '<div style="display:flex; gap:8px; margin-top:10px;">'
-            + `<button class="choice-btn" style="flex:1; background:#eef3f6;" onclick="userAdminState.push({email:'',name:'',group:'',role:'user'}); renderUserAdmin();">＋ 行を追加</button>`
+            + `<button class="choice-btn" style="flex:1; background:#eef3f6;" onclick="userAdminState.push({email:'',name:'',group:'',role:'user',active:true}); renderUserAdmin();">＋ 行を追加</button>`
             + `<button class="choice-btn" style="flex:1; background:#5E9DB8; border-color:#5E9DB8; color:#fff;" onclick="saveUserAdmin()">保存する</button>`
             + '</div>';
         body.innerHTML = html;
     }
     function saveUserAdmin() {
         const users = userAdminState
-            .map(u => ({ email: String(u.email || '').trim().toLowerCase(), name: u.name || '', role: u.role === 'admin' ? 'admin' : 'user', group: u.group || '' }))
+            .map(u => ({ email: String(u.email || '').trim().toLowerCase(), name: u.name || '', role: u.role === 'admin' ? 'admin' : 'user', group: u.group || '', active: u.active !== false }))
             .filter(u => u.email);
         appConfirm('ユーザー一覧を保存し、スプレッドシートの共有にも反映します。', { okLabel: '保存する' }).then(ok => {
             if (!ok) return;
             showBusy('保存中…');
             apiCall('saveUsers', { users: users }).then(list => {
-                userAdminState = (list || []).map(u => ({ email: u.email, name: u.name, role: u.role, group: u.group }));
+                userAdminState = (list || []).map(u => ({ email: u.email, name: u.name, role: u.role, group: u.group, active: u.active !== false }));
                 renderUserAdmin();
                 showToast('保存しました（共有も更新）', false);
             }).catch(handleServerError).finally(hideBusy);
