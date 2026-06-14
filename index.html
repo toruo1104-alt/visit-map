@@ -61,10 +61,9 @@
         #login-overlay p { font-size: 13px; color: #666; margin: 0 0 24px; max-width: 320px; line-height: 1.6; }
         #google-btn { min-height: 44px; }
         #login-note { font-size: 11px; color: #999; margin-top: 16px; max-width: 320px; line-height: 1.5; }
-        /* 下部ボタン群（サインアウト=左下、凡例=左下隣、文字サイズ=右下） */
+        /* 下部ボタン群（メニュー=左下、住所検索=その隣、文字サイズ=右下。凡例はメニュー内へ移動） */
         #signout-btn { position: absolute; bottom: 10px; left: 10px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 8px 13px; font-size: 13px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        #legend-btn  { position: absolute; bottom: 10px; left: 128px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 8px 13px; font-size: 13px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        #area-nav-btn { position: absolute; bottom: 10px; left: 200px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 8px 13px; font-size: 13px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        #area-nav-btn { position: absolute; bottom: 10px; left: 128px; z-index: 9998; background: rgba(255,255,255,0.92); border: 1px solid #ccc; border-radius: 6px; padding: 8px 13px; font-size: 13px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
         /* 住所で移動モーダル */
         #area-modal { position: absolute; inset: 0; z-index: 10002; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; padding: 16px; }
@@ -191,7 +190,33 @@
         .menu-item { display: block; width: 100%; text-align: left; background: none; border: none; padding: 11px 12px; font-size: 15px; cursor: pointer; border-radius: 6px; }
         .menu-item:active { background: #eef3f6; }
         .menu-item.admin-only { display: none; }            /* 管理項目は admin のみ表示 */
-        body.is-admin .menu-item.admin-only { display: block; }
+        body.is-admin .menu-item.admin-only { display: block; background: #eef4f7; border-left: 3px solid #5E9DB8; } /* 管理項目は淡い青＋左の青帯で通常項目と区別 */
+        .menu-section { display: none; font-size: 11px; color: #7f8c93; font-weight: bold; padding: 9px 12px 3px; border-top: 1px solid #e1e6e9; margin-top: 4px; } /* 管理者メニューの見出し（adminのみ） */
+        body.is-admin .menu-section { display: block; }
+        /* 印刷用表示（admin・PC/タブレットのみ。赤枠内のピンを白黒のSVG図で表示） */
+        @media (max-width: 768px) { body.is-admin .menu-item.pc-only { display: none; } } /* スマホでは出さない */
+        #print-view { display: none; position: fixed; inset: 0; z-index: 10010; background: #fff; color: #000; overflow: auto; padding: 16px 20px; }
+        .print-head { font-size: 16px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
+        .print-legend { font-size: 11px; border: 1px solid #000; padding: 6px 8px; margin-bottom: 10px; line-height: 1.8; }
+        .print-map { border: 1px solid #000; padding: 6px; margin-bottom: 12px; text-align: center; }
+        .print-section-title { font-size: 14px; font-weight: bold; margin: 10px 0 6px; border-bottom: 1px solid #000; }
+        .print-cards { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+        .print-card { border: 1px solid #000; padding: 6px 8px; break-inside: avoid; }
+        .print-card-h { font-weight: bold; font-size: 13px; }
+        .print-card-sub { font-size: 10px; color: #333; margin-bottom: 4px; }
+        .print-grid { border-collapse: collapse; }
+        .print-grid td { border: 1px solid #000; width: 34px; height: 30px; text-align: center; vertical-align: middle; padding: 0; }
+        .print-grid td.pf { background: #000; color: #fff; font-size: 10px; width: 22px; }
+        .print-grid td.pe { border: none; }
+        .print-grid td.pv { background: #dcdcdc; } /* 訪問済み＝網掛け（白黒でも進捗が分かる） */
+        .print-grid .pn { font-size: 9px; line-height: 1; color: #333; }
+        .print-grid .ps { font-size: 12px; font-weight: bold; line-height: 1.15; }
+        @media print {
+            body.printing > *:not(#print-view) { display: none !important; }
+            #print-view { position: static !important; overflow: visible !important; padding: 0 !important; }
+            .print-hide { display: none !important; }
+            .print-grid td.pf, .print-grid td.pv { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
         #app-modal { position: absolute; inset: 0; z-index: 10003; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; padding: 16px; touch-action: pan-x pan-y; }
         #app-modal-card { background: #fff; border-radius: 10px; width: min(430px, 94vw); max-height: 84vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
         #app-modal-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #eee; }
@@ -294,10 +319,13 @@
 <!-- メニューパネル（割り当て区域／管理機能／サインアウト。管理項目は admin のみ表示） -->
 <div id="menu-panel">
     <button class="menu-item" onclick="closeMenu(); showMyAreas();">📋 割り当て区域</button>
+    <button class="menu-item" onclick="event.stopPropagation(); closeMenu(); toggleLegend();">🗺 凡例</button>
+    <div class="menu-section admin-only">管理者メニュー</div>
     <button class="menu-item admin-only" onclick="closeMenu(); showLendScreen();">🗂 区域の貸出・返却</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showUserAdmin();">👥 ユーザー管理</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showMaintenance();">🧹 メンテナンス</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showProgress();">📈 進捗モニタリング</button>
+    <button class="menu-item admin-only pc-only" onclick="closeMenu(); showPrintView();">🖨 印刷用表示（PC/タブレット）</button>
     <button class="menu-item" onclick="closeMenu(); signOut();">🚪 サインアウト</button>
 </div>
 
@@ -312,9 +340,11 @@
     </div>
 </div>
 
+<!-- 印刷用表示（admin・PC/タブレット。赤枠内のピンを白黒のSVG図で表示）。Esc/✕で閉じる -->
+<div id="print-view"><div id="print-view-body"></div></div>
+
 <!-- 貸出プレビュー中の「戻る」ボタン（地図確認から貸出画面へ復帰） -->
 <button id="lend-preview-back" style="display:none;" onclick="backToLendScreen()">↩ 貸出画面に戻る</button>
-<button id="legend-btn"  onclick="toggleLegend()" style="display:none;">凡例</button>
 <button id="area-nav-btn" onclick="openAreaNav()" style="display:none;">🔍住所</button>
 
 <!-- 移動後に表示する地域名ラベル（常時表示・タップで枠/表示を消去） -->
@@ -437,7 +467,6 @@
     function enterApp() {
         document.getElementById('login-overlay').classList.add('hidden');
         document.getElementById('signout-btn').style.display = '';
-        document.getElementById('legend-btn').style.display = '';
         document.getElementById('area-nav-btn').style.display = '';
         document.getElementById('scale-btn').style.display = '';
         updateScaleBtnText();
@@ -531,7 +560,6 @@
         currentMarkers = [];
         document.getElementById('signout-btn').style.display = 'none';
         document.getElementById('scale-btn').style.display = 'none';
-        document.getElementById('legend-btn').style.display = 'none';
         document.getElementById('area-nav-btn').style.display = 'none';
         document.getElementById('legend-panel').classList.remove('show');
         closeMenu();
@@ -837,7 +865,7 @@
     }
 
     // 広域表示（ズームがこの値未満）のときは戸建てを隠す
-    const KODATE_HIDE_BELOW_ZOOM = 17;
+    const KODATE_HIDE_BELOW_ZOOM = 16; // 17→16。もう少しだけ広域でも戸建てを表示（z16は約85%サイズ）
     function applyZoomVisibility() {
         const zoom = map.getZoom();
         const showKodate = zoom >= KODATE_HIDE_BELOW_ZOOM;
@@ -879,11 +907,10 @@
     function toggleLegend() {
         document.getElementById('legend-panel').classList.toggle('show');
     }
-    // 凡例が開いているとき、パネル外（凡例ボタン以外）をタップしたら閉じる
+    // 凡例が開いているとき、パネル外をタップしたら閉じる（メニュー項目から開く click は stopPropagation 済みで誤閉じしない）
     document.addEventListener('click', (e) => {
         const panel = document.getElementById('legend-panel');
-        const btn = document.getElementById('legend-btn');
-        if (panel.classList.contains('show') && !panel.contains(e.target) && e.target !== btn) {
+        if (panel.classList.contains('show') && !panel.contains(e.target)) {
             panel.classList.remove('show');
             suppressMapTapUntil = Date.now() + 600; // 閉じた直後の地図タップ（新規登録）を抑止
         }
@@ -1141,7 +1168,7 @@
             const mp = marker.getPopup();
             if (mp && !mp.isOpen()) marker.togglePopup(); // 既に開いていれば何もしない（冪等）
         };
-        map.flyTo({ center: [lng, lat], zoom: 19, duration: 1200 }); // 戸建ては zoom17未満で隠れるため確実に見える寄りに
+        map.flyTo({ center: [lng, lat], zoom: 19, duration: 1200 }); // 戸建ては zoom16未満で隠れるため確実に見える寄りに
         map.once('moveend', () => setTimeout(openIt, 80)); // 間引き再描画(既存moveend)の後にマーカーを開く
         setTimeout(openIt, 1500);                          // moveendが発火しない場合のフォールバック
     }
@@ -2413,6 +2440,103 @@
             }
         });
         body.innerHTML = html;
+    }
+
+    // ── 管理: 印刷用表示（admin・PC/タブレット）。現在の赤枠内のピンを最終時点の状態で白黒SVG図に描き、
+    //    集合住宅の部屋詳細は枠の外（下）にカードで並べる。実際の印刷はブラウザ(Ctrl+P)に任せる。
+    function showPrintView() {
+        if (!currentBoxFeature || !currentBoxFeature.geometry || !currentBoxFeature.geometry.coordinates) {
+            appAlert('先に番地（赤枠）を表示してから「印刷用表示」を開いてください。\n吹き出しの住所や番地ボタンをタップすると赤枠が出ます。');
+            return;
+        }
+        const ring = currentBoxFeature.geometry.coordinates[0];
+        if (!ring || ring.length < 3) { appAlert('赤枠の形が取得できませんでした。'); return; }
+
+        // 枠内のピンを最終時点の状態で抽出
+        const pins = (currentData || []).filter(d => {
+            const lng = parseFloat(d.経度), lat = parseFloat(d.緯度);
+            return !isNaN(lng) && !isNaN(lat) && lng !== 0 && lat !== 0 && pointInRing(lng, lat, ring);
+        });
+        const kodate = pins.filter(d => d.種別 !== '集合住宅');
+        const shuga = pins.filter(d => d.種別 === '集合住宅');
+
+        // 投影範囲（枠＋ピンを内包）。緯度経度→SVG座標（緯度は上が大、経度はcos補正で縦横比を保つ）
+        let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+        const ext = (x, y) => { minLng = Math.min(minLng, x); maxLng = Math.max(maxLng, x); minLat = Math.min(minLat, y); maxLat = Math.max(maxLat, y); };
+        ring.forEach(p => ext(p[0], p[1]));
+        pins.forEach(d => ext(+d.経度, +d.緯度));
+        const cosLat = Math.cos((minLat + maxLat) / 2 * Math.PI / 180) || 1;
+        const lngSpan = Math.max(maxLng - minLng, 1e-6), latSpan = Math.max(maxLat - minLat, 1e-6);
+        const pad = 28, innerW = 700, scale = innerW / (lngSpan * cosLat);
+        const svgW = innerW + pad * 2, svgH = latSpan * scale + pad * 2;
+        const X = lng => (pad + (lng - minLng) * cosLat * scale).toFixed(1);
+        const Y = lat => (pad + (maxLat - lat) * scale).toFixed(1);
+
+        let svg = `<svg viewBox="0 0 ${svgW.toFixed(0)} ${svgH.toFixed(0)}" style="width:100%; height:auto; max-width:${svgW.toFixed(0)}px;">`;
+        svg += `<polygon points="${ring.map(p => X(p[0]) + ',' + Y(p[1])).join(' ')}" fill="#fff" stroke="#000" stroke-width="2.5"/>`;
+        kodate.forEach(d => {
+            const cx = X(+d.経度), cy = Y(+d.緯度), c = kodateVisual(d).char || '・';
+            svg += `<circle cx="${cx}" cy="${cy}" r="11" fill="#fff" stroke="#000" stroke-width="1.5"/>`
+                + `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="bold" fill="#000">${escHtml(c)}</text>`;
+        });
+        shuga.forEach((d, i) => {
+            const cx = +X(+d.経度), cy = +Y(+d.緯度), n = i + 1;
+            svg += `<rect x="${(cx - 12).toFixed(1)}" y="${(cy - 12).toFixed(1)}" width="24" height="24" rx="3" fill="#fff" stroke="#000" stroke-width="2"/>`
+                + `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="bold" fill="#000">${n}</text>`;
+        });
+        svg += `</svg>`;
+
+        const now = new Date();
+        const head = `${escHtml(currentBoxAddr || '（番地）')}　／　戸建て ${kodate.length}・集合住宅 ${shuga.length}　／　${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} 時点`;
+        const legend = `<div class="print-legend"><b>凡例</b>　○=戸建て　□=集合住宅（番号は下の詳細と対応）　｜　`
+            + `会=会えた　数字=不在（回数）　投=投函　拒=訪問拒否　外=外国語　空=空き家　他=その他　未/空欄=未訪問　｜　個=個人宅　会社=会社　｜　網掛け=訪問済み</div>`;
+        const cards = shuga.map((d, i) => printShugaCard(d, i + 1)).join('');
+
+        document.getElementById('print-view-body').innerHTML =
+            `<div class="print-hide" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:10px;">`
+            + `<div style="font-size:12px; color:#666;">ブラウザの印刷（Ctrl+P）で白黒印刷できます。網掛けも出すには印刷設定で「背景のグラフィック」をオンにしてください。</div>`
+            + `<button onclick="closePrintView()" style="font-size:15px; padding:6px 14px; border:1px solid #999; border-radius:6px; background:#f4f4f4; cursor:pointer; flex-shrink:0;">✕ 閉じる</button></div>`
+            + `<div class="print-head">${head}</div>`
+            + legend
+            + `<div class="print-map">${svg}</div>`
+            + (shuga.length ? `<div class="print-section-title">集合住宅の詳細</div><div class="print-cards">${cards}</div>` : '');
+
+        document.getElementById('print-view').style.display = 'block';
+        document.body.classList.add('printing');
+        document.addEventListener('keydown', printEscHandler, true);
+    }
+    function printEscHandler(e) { if (e.key === 'Escape') { e.stopPropagation(); closePrintView(); } }
+    function closePrintView() {
+        document.getElementById('print-view').style.display = 'none';
+        document.body.classList.remove('printing');
+        document.removeEventListener('keydown', printEscHandler, true);
+    }
+    // 集合住宅1棟の部屋グリッド（白黒・印刷用）。番号=SVG上の□と対応。各セルは部屋番号＋状態記号、訪問済みは網掛け。
+    function printShugaCard(item, num) {
+        const floors = parseInt(item.階数 || 1), maxRoom = parseInt(item.最大部屋番号 || 1);
+        const valid = String(item.有効部屋リスト || '').split(',').map(Number);
+        let map = {}; try { map = JSON.parse(item.部屋ステータス || '{}') || {}; } catch (e) { map = {}; }
+        const hideNum = String(item.部屋番号非表示) === '1';
+        const marks = parseRoomMarks(item.個人宅);
+        let grid = '<table class="print-grid"><tbody>';
+        for (let f = floors; f >= 1; f--) {
+            grid += `<tr><td class="pf">${f}F</td>`;
+            for (let r = 1; r <= maxRoom; r++) {
+                const rn = f * 100 + r;
+                if (!valid.includes(rn)) { grid += '<td class="pe"></td>'; continue; }
+                const st = map[rn], rv = roomVisual(st);
+                const numLabel = hideNum ? cornerLabel(f, r, floors, maxRoom) : String(rn);
+                const visited = !!(st && (String(st).indexOf('会えた') >= 0 || String(st).indexOf('不在') >= 0 || String(st).indexOf('投函') >= 0));
+                const sub = marks[rn] ? (marks[rn] === 'c' ? '会社' : '個') : (rv.char || '');
+                grid += `<td class="pc${visited ? ' pv' : ''}"><div class="pn">${escHtml(String(numLabel))}</div>${sub ? `<div class="ps">${escHtml(String(sub))}</div>` : ''}</td>`;
+            }
+            grid += '</tr>';
+        }
+        grid += '</tbody></table>';
+        const addr = (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? item.住所 : (deriveAddress(+item.経度, +item.緯度) || '');
+        return `<div class="print-card"><div class="print-card-h">${num}. ${escHtml(item['建物名 / 世帯名'] || '')}</div>`
+            + (addr ? `<div class="print-card-sub">${escHtml(addr)}</div>` : '')
+            + grid + `</div>`;
     }
 
     function showMyAreas() {
