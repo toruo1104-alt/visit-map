@@ -203,7 +203,7 @@
         .print-left, .print-right { flex: 0 0 auto; }
         .print-panel-title { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
         .print-map-wrap { position: relative; border: 1.5px solid #000; overflow: hidden; }
-        .print-map-wrap img.basemap { display: block; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) brightness(0.9) contrast(1.15); } /* 建物・道路を濃いめに */
+        .print-map-wrap img.basemap { display: block; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) brightness(1.1) contrast(1.08); } /* 薄い地色を白く飛ばして見やすく */
         .print-map-wrap .ov { position: absolute; inset: 0; pointer-events: none; }
         .print-credit { font-size: 10px; color: #666; margin-top: 4px; }
         .print-card { position: absolute; background: rgba(255,255,255,0.96); border: 1.5px solid #000; border-radius: 3px; padding: 3px 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.35); }
@@ -2470,6 +2470,15 @@
         const spanX = Math.max(wx(e) - wx(w), 1e-9), spanY = Math.max(wy(s) - wy(n), 1e-9);
         return Math.max(0, Math.min(19, Math.log2(Math.min(imgW * f / spanX, imgH * f / spanY))));
     }
+    // ★（5角星）の頂点列。訪問拒否/外国語のアイコンに使う
+    function starPts_(cx, cy, R, r) {
+        let p = '';
+        for (let i = 0; i < 10; i++) {
+            const a = -Math.PI / 2 + i * Math.PI / 5, rad = (i % 2 === 0) ? R : r;
+            p += (cx + rad * Math.cos(a)).toFixed(1) + ',' + (cy + rad * Math.sin(a)).toFixed(1) + ' ';
+        }
+        return p.trim();
+    }
 
     function showPrintView() {
         if (!currentBoxFeature || !currentBoxFeature.geometry || !currentBoxFeature.geometry.coordinates) {
@@ -2513,10 +2522,11 @@
         let ovD = `<svg class="ov" viewBox="0 0 ${DW} ${DH}">`;
         ovD += `<polygon points="${ring.map(p => dProj.x(p[0]).toFixed(1) + ',' + dProj.y(p[1]).toFixed(1)).join(' ')}" fill="none" stroke="#000" stroke-width="2.5"/>`;
         kodate.forEach(d => {
-            const cx = dProj.x(+d.経度).toFixed(1), cy = dProj.y(+d.緯度).toFixed(1);
-            const kc = kodateVisual(d).char, c = (kc === '拒' || kc === '外') ? kc : '';
-            ovD += `<circle cx="${cx}" cy="${cy}" r="10" fill="#fff" stroke="#000" stroke-width="1.5"/>`
-                + (c ? `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="bold" fill="#000">${escHtml(c)}</text>` : '');
+            const kc = kodateVisual(d).char;
+            if (kc !== '拒' && kc !== '外') return; // 通常の戸建ては印を出さない（拒/外だけ★で表示）
+            const cx = dProj.x(+d.経度), cy = dProj.y(+d.緯度);
+            ovD += `<polygon points="${starPts_(cx, cy, 15, 6)}" fill="#fff" stroke="#000" stroke-width="1.5"/>`
+                + `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="bold" fill="#000">${escHtml(kc)}</text>`;
         });
         const nextTop = { L: topPad, R: topPad };
         let cardsHtml = '';
@@ -2536,15 +2546,13 @@
         });
         ovD += `</svg>`;
 
-        // 広域地図（右）。詳細より少し引く（≈従来の1/3の広さ）。詳細範囲を四角＋中心点で示す
+        // 広域地図（右）。区域の全体が見える広さ（詳細−3ズーム）。四角は出さず、位置を★で示す
         const OW = 300, OH = 470;
-        const oZoom = Math.max(11, dZoom - 2);
+        const oZoom = Math.max(11, dZoom - 3);
         const oProj = mercProjector_(cLng, cLat, oZoom, OW, OH);
         const oUrl = staticMapUrl_(cLng, cLat, oZoom, OW, OH);
-        const rectPts = [[w, n], [e, n], [e, s], [w, s]].map(p => oProj.x(p[0]).toFixed(1) + ',' + oProj.y(p[1]).toFixed(1)).join(' ');
         const ovO = `<svg class="ov" viewBox="0 0 ${OW} ${OH}">`
-            + `<polygon points="${rectPts}" fill="rgba(0,0,0,0.10)" stroke="#000" stroke-width="2.5"/>`
-            + `<circle cx="${oProj.x(cLng).toFixed(1)}" cy="${oProj.y(cLat).toFixed(1)}" r="5" fill="#000"/></svg>`;
+            + `<polygon points="${starPts_(oProj.x(cLng), oProj.y(cLat), 13, 5.5)}" fill="#000" stroke="#000" stroke-width="1"/></svg>`;
 
         const now = new Date();
         const head = `${escHtml(currentBoxAddr || '（番地）')}　／　戸建て ${kodate.length}・集合住宅 ${shuga.length}　／　${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} 時点`;
