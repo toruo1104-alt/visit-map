@@ -201,6 +201,8 @@
         #app-modal-body select, #app-modal-body input { box-sizing: border-box; padding: 8px; font-size: 15px; border: 1px solid #bbb; border-radius: 6px; }
         .lend-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px dashed #e3e3e3; }
         .lend-row .grow { flex: 1; min-width: 0; }
+        /* ユーザー管理は1行=1ユーザー。区切りをはっきりさせる（濃い実線） */
+        .user-row { border-bottom: 2px solid #9aa3ab; padding-top: 10px; padding-bottom: 10px; }
         .due-over { color: #C75F56; font-weight: bold; } /* 返却期日超過 */
         .due-soon { color: #B0763C; font-weight: bold; } /* 期日まで2週間以内（落ち着いたアンバー） */
         #lend-preview-back { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 9999; background: #34495e; color: #fff; border: none; border-radius: 20px; padding: 11px 20px; font-size: 15px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.35); cursor: pointer; }
@@ -290,6 +292,7 @@
 <!-- メニューパネル（割り当て区域／管理機能／サインアウト。管理項目は admin のみ表示） -->
 <div id="menu-panel">
     <button class="menu-item" onclick="closeMenu(); showMyAreas();">📋 割り当て区域</button>
+    <button class="menu-item" onclick="closeMenu(); reloadApp();">🔄 最新の状態に更新</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showLendScreen();">🗂 区域の貸出・返却</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showUserAdmin();">👥 ユーザー管理</button>
     <button class="menu-item admin-only" onclick="closeMenu(); showMaintenance();">🧹 メンテナンス</button>
@@ -645,7 +648,7 @@
     let currentMarkers = [];
     let activeNewMarker = null;
     let gridActiveRooms = [];
-    let gridPersonalRooms = []; // 登録/編集グリッドで「個人宅」マークを付けた部屋番号
+    let gridRoomMark = {}; // 登録/編集グリッドの部屋マーク {部屋番号:'p'(個人宅)|'c'(会社)}。長押しで 無→個人→会社→無 と循環
     let currentData = []; // 直近にサーバーから受け取ったデータ（編集機能で参照）
 
     // 集合住宅ピンの色（構成属性で見分ける／落ち着いたトーン）
@@ -685,8 +688,8 @@
         map.easeTo({ center: lngLat, offset: [0, h * 0.18], duration: 300 });
     }
 
-    // 吹き出しの実高さを測り、「吹き出しの上端」が画面上部の一定位置に来るよう地図を移動する。
-    // （ピンではなく吹き出し上部を基準にするので、背の高い集合住宅でも上端が見切れない）
+    // 吹き出しの実高さを測り、吹き出しが画面の縦中央に来るよう地図を移動する。
+    // 背の高い集合住宅の詳細など、中央寄せだと上端が見切れる場合だけ「上端を画面上部に合わせる」へ自動で切替。
     // reservePx: これから広がる余白（集合住宅の部屋操作欄ぶん）を前もって見込む。
     function fitPopupInView(marker, reservePx) {
         const popup = marker.getPopup();
@@ -697,11 +700,15 @@
         const pad = 12, tip = 28; // 吹き出し口ぶんの余白
         let popupH = (content ? content.getBoundingClientRect().height : mapH * 0.4) + (reservePx || 0);
         popupH = Math.min(popupH, mapH * 0.82); // 吹き出しは最大でも約82vh（詳細表示の縦長に合わせる）
-        // 吹き出し上端を画面の上から topMargin の位置に合わせる。
-        //   吹き出し上端Y = ピン画面Y − tip − popupH、ピン画面Y = mapH/2 + oy
-        //   → oy = topMargin + tip + popupH − mapH/2
+        // 基本は吹き出しを画面の縦中央に置く（戸建てなど背の低い吹き出しが上部に寄らないように）。
+        //   吹き出し中心Y = ピン画面Y − tip − popupH/2、ピン画面Y = mapH/2 + oy
+        //   中心を mapH/2 に合わせる → oy = tip + popupH/2
+        // ただし背の高い吹き出し（集合住宅の詳細など）は中央寄せだと上端が見切れるので、
+        // 「上端を topMargin に合わせる oy」を下限とし、はみ出す場合はそちらを採用する。
         const topMargin = mapH * 0.12;
-        let oy = topMargin + tip + popupH - mapH / 2;
+        const oyCenter = tip + popupH / 2;                 // 縦中央寄せ（戸建て等）
+        const oyTop = topMargin + tip + popupH - mapH / 2; // 上端を topMargin に固定（背の高い吹き出し用）
+        let oy = Math.max(oyCenter, oyTop);
         const limit = mapH / 2 - pad; // ピンが画面外に出ない範囲にだけ収める
         oy = Math.max(-limit, Math.min(oy, limit));
         map.easeTo({ center: marker.getLngLat(), offset: [0, oy], duration: 300 });
@@ -1189,7 +1196,7 @@
         const lng = parseFloat(item.経度), lat = parseFloat(item.緯度);
         const shown = stored || '判定中…';
         return `<div style="font-size:14px; color:#555; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
-            + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}" style="cursor:pointer;" title="タップで番地を赤枠表示／長押しで「号」を設定">${escHtml(shown)}</span>`
+            + `🏠 <span class="derived-addr" id="addr-text-${item.rowNumber}" data-lng="${lng}" data-lat="${lat}" data-stored="${stored ? '1' : '0'}" style="cursor:pointer;" title="タップで番地を赤枠表示／長押しで住所を指定">${escHtml(shown)}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressFor(${item.rowNumber})">住所を指定</button>`
             + `<span style="cursor:pointer; padding:0 4px; font-size:17px;" title="Googleマップでこの地点を開く" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${lat},${lng}','_blank')">🗺</span>`
             + (attrHtml || '')
@@ -1217,13 +1224,13 @@
             const a = deriveAddress(parseFloat(el.dataset.lng), parseFloat(el.dataset.lat));
             el.textContent = a ? a : (addrPoints ? '（住所判定不可）' : '判定中…');
         });
-        // 住所表示にタップ（番地を赤枠表示）と長押し（「号」を設定）を割り当てる
+        // 住所表示にタップ（番地を赤枠表示）と長押し（住所を指定）を割り当てる
         rootEl.querySelectorAll('.derived-addr').forEach(el => {
             if (el._goBound) return;
             const rn = parseInt(String(el.id).replace('addr-text-', ''));
             if (!rn) return;
             el._goBound = true;
-            attachLongPress(el, () => outlineAddrForPin(rn), () => pickGoForPin(rn));
+            attachLongPress(el, () => outlineAddrForPin(rn), () => pickAddressFor(rn));
         });
     }
     // 既存ピンの住所を指定（ピッカーを開く→選択で保存）
@@ -1284,7 +1291,7 @@
     // 新規登録フォームに入れる「住所」行。attrHtml: 戸建てで右側に置く属性の現在値ボタン
     function newAddrRowHtml(attrHtml) {
         return `<div style="font-size:14px; color:#555; margin:-2px 0 6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`
-            + `🏠 <span id="new-addr-text" style="cursor:pointer;" title="タップで番地を赤枠表示／長押しで「号」を設定">${escHtml(newPinAddress || '（住所未指定）')}</span>`
+            + `🏠 <span id="new-addr-text" style="cursor:pointer;" title="タップで番地を赤枠表示／長押しで住所を指定">${escHtml(newPinAddress || '（住所未指定）')}</span>`
             + `<button class="save-btn detail-only" style="background:#7f8c8d; padding:3px 8px;" onclick="pickAddressForNew()">住所を指定</button>`
             + (attrHtml || '')
             + `</div>`;
@@ -1717,7 +1724,7 @@
     function handleMapClickOrTap(lngLat, forcedType) {
         if (activeNewMarker) activeNewMarker.remove();
         gridActiveRooms = [];
-        gridPersonalRooms = [];
+        gridRoomMark = {};
 
         // 座標を100%数値型としてパース
         const latVal = parseFloat(lngLat.lat);
@@ -1781,7 +1788,7 @@
         popup.on('open', () => {
             fitPopupInView(activeNewMarker, 0);
             const el = document.getElementById('new-addr-text');
-            if (el && !el._goBound) { el._goBound = true; attachLongPress(el, () => outlineNewAddr(), () => pickGoForNew()); }
+            if (el && !el._goBound) { el._goBound = true; attachLongPress(el, () => outlineNewAddr(), () => pickAddressForNew()); }
         });
         activeNewMarker = new mapboxgl.Marker({ color: forcedType === '戸建て' ? '#E0A93C' : '#C75F56' })
             .setLngLat([lngVal, latVal])
@@ -1844,6 +1851,34 @@
         return (v && h) ? (h + v) : '';
     }
 
+    // 部屋マーク（個人宅/会社）の保存形式 ⇔ {部屋番号:'p'|'c'} 変換。
+    // V列文字列: 個人=数字そのまま("305")／会社=先頭C("C305")。旧データ(数字のみ)は全て個人として読める。
+    function parseRoomMarks(str) {
+        const m = {};
+        String(str || '').split(',').forEach(tok => {
+            tok = tok.trim();
+            if (!tok) return;
+            const isCo = (tok[0] === 'C' || tok[0] === 'c');
+            const n = parseInt(isCo ? tok.slice(1) : tok);
+            if (!isNaN(n)) m[n] = isCo ? 'c' : 'p';
+        });
+        return m;
+    }
+    // マップ→V列文字列。validRooms に無い部屋のマークは捨てる（部屋を外したら一緒に消える）。
+    function encodeRoomMarks(map, validRooms) {
+        return Object.keys(map)
+            .map(Number)
+            .filter(n => validRooms.includes(n))
+            .map(n => (map[n] === 'c' ? 'C' + n : '' + n))
+            .join(',');
+    }
+    // セルに表示するマークラベル（個人宅=🏠／会社=🏢）。マーク無しは空。
+    function roomMarkLabel(mark) {
+        if (mark === 'p') return '🏠<span style="font-size:10px;">個人</span>';
+        if (mark === 'c') return '🏢<span style="font-size:10px;">会社</span>';
+        return '';
+    }
+
     function renderRoomGrid() {
         const { floors, maxRoom } = getGridDims();
         const hideNum = isHideRoomNum();
@@ -1854,7 +1889,7 @@
                 const roomNum = f * 100 + r;
                 const active = gridActiveRooms.includes(roomNum);
                 let label = hideNum ? cornerLabel(f, r, floors, maxRoom) : String(roomNum);
-                if (active && gridPersonalRooms.includes(roomNum)) label = '🏠<span style="font-size:10px;">個人</span>'; // 個人宅は家アイコン＋小さく「個人」
+                if (active && gridRoomMark[roomNum]) label = roomMarkLabel(gridRoomMark[roomNum]); // 個人宅=🏠／会社=🏢
                 html += `<td id="setup-rm-${roomNum}" style="min-width:40px; background:${active ? '#5FA97D' : '#fff'}; color:${active ? '#fff' : '#333'}; cursor:pointer;">${label}</td>`;
             }
             html += `</tr>`;
@@ -1862,12 +1897,12 @@
         html += '</tbody></table></div>';
         const container = document.getElementById('setup-grid-container');
         container.innerHTML = html;
-        // 各セルにタップ（部屋の有無切替）と長押し（個人宅マークON/OFF）を割り当てる
+        // 各セルにタップ（部屋の有無切替）と長押し（マーク循環: 個人宅→会社→無し）を割り当てる
         for (let f = floors; f >= 1; f--) {
             for (let r = 1; r <= maxRoom; r++) {
                 const rn = f * 100 + r;
                 const cell = document.getElementById(`setup-rm-${rn}`);
-                if (cell) attachLongPress(cell, () => toggleSetupRoom(rn), () => togglePersonalRoom(rn));
+                if (cell) attachLongPress(cell, () => toggleSetupRoom(rn), () => cycleRoomMark(rn));
             }
         }
     }
@@ -1887,10 +1922,9 @@
         const el = document.getElementById(`setup-rm-${roomNum}`);
         const idx = gridActiveRooms.indexOf(roomNum);
         if (idx > -1) {
-            // 部屋を外す → その部屋の個人宅マークも一緒に解除（🏠を消すため再描画）
+            // 部屋を外す → その部屋のマーク(個人宅/会社)も一緒に解除（アイコンを消すため再描画）
             gridActiveRooms.splice(idx, 1);
-            const pi = gridPersonalRooms.indexOf(roomNum);
-            if (pi > -1) gridPersonalRooms.splice(pi, 1);
+            delete gridRoomMark[roomNum];
             renderRoomGrid();
         } else {
             gridActiveRooms.push(roomNum);
@@ -1898,12 +1932,14 @@
         }
     }
 
-    // 部屋のマスを長押し → 個人宅（大家さん等）マークをON/OFF。有効な部屋だけが対象。
-    function togglePersonalRoom(roomNum) {
+    // 部屋のマスを長押し → マークを循環: 無し→個人宅(🏠)→会社(🏢)→無し。有効な部屋だけが対象。
+    function cycleRoomMark(roomNum) {
         if (!gridActiveRooms.includes(roomNum)) return; // 部屋が無い所はマークしない
-        const i = gridPersonalRooms.indexOf(roomNum);
-        if (i > -1) gridPersonalRooms.splice(i, 1); else gridPersonalRooms.push(roomNum);
-        renderRoomGrid(); // 🏠の付け外しを反映
+        const cur = gridRoomMark[roomNum];
+        if (!cur) gridRoomMark[roomNum] = 'p';
+        else if (cur === 'p') gridRoomMark[roomNum] = 'c';
+        else delete gridRoomMark[roomNum];
+        renderRoomGrid(); // マークの変化を反映
     }
 
     function submitNewLocation(lat, lng, type) {
@@ -1928,7 +1964,7 @@
             data.attribute = document.getElementById('new-attribute').value;
             data.lock = document.getElementById('new-lock').value;
             data.hideRoomNum = isHideRoomNum();
-            data.personalRooms = gridPersonalRooms.filter(rn => gridActiveRooms.includes(rn)).join(',');
+            data.personalRooms = encodeRoomMarks(gridRoomMark, gridActiveRooms);
         }
 
         const btn = document.getElementById('reg-btn');
@@ -2141,6 +2177,18 @@
     }
     function toggleMenu() { document.getElementById('menu-panel').classList.toggle('show'); }
     function closeMenu() { document.getElementById('menu-panel').classList.remove('show'); }
+    /* ホーム画面アプリ（PWA）はブラウザの更新UIが無く、引っ張って更新も分かりにくい。
+       メニューから強制リロードする。URLに v=時刻 を付け直すことでキャッシュされた古い
+       index.html の再表示を防ぐ（Ctrl+Shift+R 相当）。?area=/?pin= 等の既存パラメータは保持。 */
+    function reloadApp() {
+        try {
+            const u = new URL(location.href);
+            u.searchParams.set('v', Date.now());
+            location.replace(u.href);
+        } catch (e) {
+            location.reload();
+        }
+    }
     // メニュー外タップで閉じる（凡例パネルと同じ流儀）
     document.addEventListener('click', (e) => {
         const p = document.getElementById('menu-panel');
@@ -2215,20 +2263,21 @@
     }
 
     // ── 管理: 進捗モニタリング（丁目単位。currentData から その場集計＝常に最新。シートには書かない） ──
-    let progState = { mode: 'all', sort: 'rate', open: {} }; // mode: all/kodate/room、sort: rate(低い順)/count(多い順)
+    let progState = { mode: 'all', sort: 'rate', open: {}, areas: [] }; // mode: all/kodate/room/pin、sort: rate(低い順)/count(多い順)。areas=件数(AreaList)
     // 訪問結果（不在/会えた/投函）か＝訪問済み。属性(拒否/外国語/空き家/他/未訪問)は未訪問扱い。
     function isVisitResult_(s) { s = String(s || ''); return s.indexOf('不在') >= 0 || s.indexOf('会えた') >= 0 || s.indexOf('投函') >= 0; }
     function progTotals_(s, mode) {
         if (mode === 'kodate') return { total: s.kodatePin, done: s.kodateDone };
         if (mode === 'room') return { total: s.room, done: s.roomDone };
+        if (mode === 'pin') return { total: s.kensu, done: s.pin }; // ピン基準＝母数:件数(AreaList) / 分子:登録ピン数
         return { total: s.kodatePin + s.room, done: s.kodateDone + s.roomDone }; // 合算＝戸建てピン＋集合の部屋（棟は数えない）
     }
     function barColor_(r) { return r < 25 ? '#C75F56' : r < 50 ? '#D98E5A' : r < 70 ? '#E2C36A' : r < 85 ? '#9BC27E' : '#5E9DB8'; }
     function fmtPct_(done, total) { return total ? Math.round(done / total * 1000) / 10 : 0; }
     function progBar_(r) { return `<div class="prog-bar"><span style="width:${Math.min(100, r)}%; background:${barColor_(r)};"></span></div>`; }
     // currentData を 地区→丁目 に集計する
-    function aggregateProgress() {
-        const blank = () => ({ kodatePin: 0, kodateDone: 0, room: 0, roomDone: 0, vacant: 0, refuse: 0 });
+    function aggregateProgress(areaList) {
+        const blank = () => ({ kodatePin: 0, kodateDone: 0, room: 0, roomDone: 0, vacant: 0, refuse: 0, pin: 0, kensu: 0 });
         const tree = {};
         const bucket = (district, chomeKey) => {
             if (!tree[district]) tree[district] = { chomes: {}, total: blank() };
@@ -2244,6 +2293,7 @@
             if (m) { district = m[1]; chomeKey = m[1] + m[2]; }
             else if (addr) { district = addr; chomeKey = addr; } // 丁目なし地区（鹿骨町 等）
             const st = bucket(district, chomeKey);
+            st.pin += 1; // ピン基準の分子＝登録ピン数（1行=1ピン。戸建ても集合住宅も棟1つで1ピン）
             if (item.種別 === '集合住宅') {
                 const validSet = {};
                 let rooms = 0;
@@ -2269,11 +2319,20 @@
                 if (!hasAttr && isVisitResult_(item.最新ステータス)) st.kodateDone += 1;
             }
         });
+        // 「件数」(AreaList) を丁目バケットに合算＝ピン基準の母数。ピンが無い丁目もここで作られ 0% で出る。
+        (areaList || []).forEach(a => {
+            const cnt = parseInt(a.count); if (isNaN(cnt) || cnt <= 0) return;
+            const area = String(a.area || '');
+            let district = area, chomeKey = area;
+            const mm = area.match(/^(.+?)(\d+丁目)\d+番$/); // ピン側と同じ正規化で丁目キーを一致させる
+            if (mm) { district = mm[1]; chomeKey = mm[1] + mm[2]; }
+            bucket(district, chomeKey).kensu += cnt;
+        });
         Object.keys(tree).forEach(d => {
             const tot = tree[d].total;
             Object.keys(tree[d].chomes).forEach(c => {
                 const s = tree[d].chomes[c];
-                tot.kodatePin += s.kodatePin; tot.kodateDone += s.kodateDone; tot.room += s.room; tot.roomDone += s.roomDone; tot.vacant += s.vacant; tot.refuse += s.refuse;
+                tot.kodatePin += s.kodatePin; tot.kodateDone += s.kodateDone; tot.room += s.room; tot.roomDone += s.roomDone; tot.vacant += s.vacant; tot.refuse += s.refuse; tot.pin += s.pin; tot.kensu += s.kensu;
             });
         });
         return tree;
@@ -2289,43 +2348,51 @@
         openAppModal('📈 進捗モニタリング');
         const body = document.getElementById('app-modal-body');
         if (!addrPoints) { body.innerHTML = '<div style="color:#888; padding:8px;">住所データを読み込み中です。少し待ってから開き直してください。</div>'; return; }
-        if (!currentData || !currentData.length) {
-            showBusy('読み込み中…');
-            apiCall('getData', {}).then(d => { renderMarkers(d); progState.tree = aggregateProgress(); renderProgress(); }).catch(handleServerError).finally(hideBusy);
-            return;
-        }
-        progState.tree = aggregateProgress(); // 集計は開いた時に1回だけ（モード/並び/展開のトグルでは再計算しない＝重い deriveAddress を繰り返さない）
-        renderProgress();
+        showBusy('読み込み中…');
+        // 「ピン」基準の母数に AreaList の件数を使うため getLendData も取得（ピン未取得なら getData も並行）
+        const dataP = (!currentData || !currentData.length) ? apiCall('getData', {}) : Promise.resolve(null);
+        // getLendData(件数)は失敗しても進捗本体(getData)は出す＝ピンモードの母数が無いだけに留める（巻き添え防止）
+        Promise.all([dataP, apiCall('getLendData', {}).catch(() => null)]).then(([d, lend]) => {
+            if (d) renderMarkers(d);
+            progState.areas = (lend && lend.areas) || [];
+            progState.tree = aggregateProgress(progState.areas); // 集計は開いた時に1回だけ（モード/並び/展開のトグルでは再計算しない＝重い deriveAddress を繰り返さない）
+            renderProgress();
+        }).catch(handleServerError).finally(hideBusy);
     }
     function renderProgress() {
         const body = document.getElementById('app-modal-body');
-        const tree = progState.tree || aggregateProgress();
+        const tree = progState.tree || aggregateProgress(progState.areas);
         const mode = progState.mode;
-        const ML = { all: '合算', kodate: '戸建て', room: '部屋' };
+        const doneLabel = (mode === 'pin') ? '登録' : '訪問済'; // ピン基準は「登録(ピン)数 / 件数」
+        const ML = { all: '合算', kodate: '戸建て', room: '部屋', pin: 'ピン' };
+        const rem_ = (t) => Math.max(0, t.total - t.done); // 残はマイナスにしない（ピン>件数 や 件数未入力 でも0止まり）
+        const pctTxt_ = (t) => (mode === 'pin' && t.total === 0) ? '件数未' : (fmtPct_(t.done, t.total) + '%'); // 件数未入力(分母0)は率を出さない
         let g = { total: 0, done: 0 };
         Object.keys(tree).forEach(d => { const t = progTotals_(tree[d].total, mode); g.total += t.total; g.done += t.done; });
         const grate = fmtPct_(g.done, g.total);
         let html = '<div style="display:flex; gap:6px; margin-bottom:8px;">'
-            + ['all', 'kodate', 'room'].map(mk => `<button class="choice-btn" style="flex:1; ${mode === mk ? 'background:#5E9DB8; border-color:#5E9DB8; color:#fff;' : ''}" onclick="setProgMode('${mk}')">${ML[mk]}</button>`).join('')
+            + ['all', 'kodate', 'room', 'pin'].map(mk => `<button class="choice-btn" style="flex:1; ${mode === mk ? 'background:#5E9DB8; border-color:#5E9DB8; color:#fff;' : ''}" onclick="setProgMode('${mk}')">${ML[mk]}</button>`).join('')
             + '</div>';
         html += `<div style="background:#f0f7f9; border:1px solid #cfe3ec; border-radius:8px; padding:10px; margin-bottom:10px;">`
             + `<div style="font-weight:bold; font-size:15px;">全体（${ML[mode]}）</div>`
-            + `<div style="font-size:14px; margin:4px 0;">訪問済 ${g.done} / ${g.total}　<b style="color:${barColor_(grate)};">${grate}%</b>　残 ${g.total - g.done}</div>`
+            + `<div style="font-size:14px; margin:4px 0;">${doneLabel} ${g.done} / ${g.total}　<b style="color:${barColor_(grate)};">${grate}%</b>　残 ${Math.max(0, g.total - g.done)}</div>`
             + progBar_(grate) + '</div>';
         html += `<div style="display:flex; justify-content:flex-end; margin-bottom:6px;"><button class="save-btn" style="background:#7f8c8d; padding:3px 8px;" onclick="toggleProgSort()">並び：${progState.sort === 'rate' ? '進捗が低い順' : '件数が多い順'} ▼</button></div>`;
-        const rows = Object.keys(tree).map(d => { const t = progTotals_(tree[d].total, mode); return { d: d, t: t, rate: fmtPct_(t.done, t.total), cnt: t.total }; });
+        const rows = Object.keys(tree).map(d => { const t = progTotals_(tree[d].total, mode); return { d: d, t: t, rate: fmtPct_(t.done, t.total), cnt: t.total }; })
+            .filter(row => !(row.t.total === 0 && row.t.done === 0)); // 中身ゼロのバケット（件数のみ・ピン0が他モードに混入する回帰）を除外
         sortProg_(rows);
         rows.forEach(row => {
             const d = row.d, t = row.t, rate = row.rate, opened = !!progState.open[d];
             html += `<div class="lend-row" style="cursor:pointer;" onclick="toggleProgDistrict('${escHtml(d)}')">`
-                + `<div class="grow"><b>${opened ? '▾' : '▸'} ${escHtml(d)}</b>　<span style="font-size:12px; color:#666;">${t.done}/${t.total}・残${t.total - t.done}</span>${progBar_(rate)}</div>`
-                + `<div style="width:50px; text-align:right; font-weight:bold; color:${barColor_(rate)};">${rate}%</div></div>`;
+                + `<div class="grow"><b>${opened ? '▾' : '▸'} ${escHtml(d)}</b>　<span style="font-size:12px; color:#666;">${t.done}/${t.total}・残${rem_(t)}</span>${progBar_(rate)}</div>`
+                + `<div style="width:50px; text-align:right; font-weight:bold; color:${barColor_(rate)};">${pctTxt_(t)}</div></div>`;
             if (opened) {
-                const crows = Object.keys(tree[d].chomes).map(c => { const ct = progTotals_(tree[d].chomes[c], mode); return { c: c, ct: ct, rate: fmtPct_(ct.done, ct.total), cnt: ct.total, stat: tree[d].chomes[c] }; });
+                const crows = Object.keys(tree[d].chomes).map(c => { const ct = progTotals_(tree[d].chomes[c], mode); return { c: c, ct: ct, rate: fmtPct_(ct.done, ct.total), cnt: ct.total, stat: tree[d].chomes[c] }; })
+                    .filter(cr => !(cr.ct.total === 0 && cr.ct.done === 0));
                 sortProg_(crows);
                 crows.forEach(cr => {
-                    const s = cr.stat, extra = (s.vacant || s.refuse) ? `　空${s.vacant}/拒${s.refuse}` : '';
-                    html += `<div class="lend-row" style="padding-left:16px; background:#fafbfc;"><div class="grow"><span style="font-size:13px;">${escHtml(cr.c)}</span>　<span style="font-size:11px; color:#888;">${cr.ct.done}/${cr.ct.total}${extra}</span>${progBar_(cr.rate)}</div><div style="width:46px; text-align:right; font-size:13px; color:${barColor_(cr.rate)};">${cr.rate}%</div></div>`;
+                    const s = cr.stat, extra = (mode !== 'pin' && (s.vacant || s.refuse)) ? `　空${s.vacant}/拒${s.refuse}` : ''; // ピン基準では空き家/拒否(訪問状態)は出さない
+                    html += `<div class="lend-row" style="padding-left:16px; background:#fafbfc;"><div class="grow"><span style="font-size:13px;">${escHtml(cr.c)}</span>　<span style="font-size:11px; color:#888;">${cr.ct.done}/${cr.ct.total}${extra}</span>${progBar_(cr.rate)}</div><div style="width:46px; text-align:right; font-size:13px; color:${barColor_(cr.rate)};">${pctTxt_(cr.ct)}</div></div>`;
                 });
             }
         });
@@ -2347,8 +2414,8 @@
             const grp = list.filter(a => a.lentTo === 'group');  // 自分の所属グループへの貸出
             let html = mine.length ? mine.map(rowHtml).join('') : '<div style="color:#888; padding:8px;">あなた個人への割り当てはありません。</div>';
             if (grp.length) {
-                html += `<div style="background:#f2f3f5; border-radius:6px; padding:8px; margin-top:10px;">`;
-                html += `<div style="font-weight:bold; padding-bottom:6px;">👥 グループへの割り当て（${escHtml(grp[0].group)}）</div>`;
+                html += `<div style="background:#e6f0f5; border:1px solid #9cc3d4; border-left:5px solid #5E9DB8; border-radius:6px; padding:8px; margin-top:16px;">`;
+                html += `<div style="font-weight:bold; padding-bottom:6px; color:#356B82; border-bottom:1px solid #b9d6e2; margin-bottom:4px;">👥 グループへの割り当て（${escHtml(grp[0].group)}）</div>`;
                 html += grp.map(rowHtml).join('');
                 html += `</div>`;
             }
@@ -2426,8 +2493,8 @@
                 + '</div>';
         }
         const lent = lendState.areas.filter(a => a.user || a.group);
-        html += `<div style="background:#f2f3f5; border-radius:6px; padding:8px; margin-top:8px;">`;
-        html += `<div style="font-weight:bold; padding-bottom:6px;">貸出中の区域（${lent.length}）</div>`;
+        html += `<div style="background:#d4dae0; border:1px solid #b3bcc4; border-radius:6px; padding:8px; margin-top:8px;">`;
+        html += `<div style="font-weight:bold; padding-bottom:6px; border-bottom:1px solid #aeb8c0; margin-bottom:4px;">貸出中の区域（${lent.length}）</div>`;
         html += lent.length ? lent.map(a =>
             `<div class="lend-row"><div class="grow"><b>${escHtml(a.area)}</b>　<span style="font-size:13px; color:#333;">${escHtml(a.group ? a.group + '（グループ）' : (a.name || uname(a.user)))}</span><br>`
             + `<span style="font-size:12px; color:#666;">${escHtml(a.lendDate || '-')} → <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
@@ -2507,7 +2574,7 @@
                 ? '<span style="font-size:12px; color:#B0763C; font-weight:bold; padding:6px 2px; white-space:nowrap;">👑 オーナー（管理者）</span>'
                 : `<select style="font-size:13px; padding:6px;" onchange="userAdminState[${i}].role = this.value"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>一般</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>管理者</option></select>`
                   + `<button class="clear-btn" onclick="userAdminState.splice(${i}, 1); renderUserAdmin();">削除</button>`;
-            return `<div class="lend-row" style="flex-wrap:wrap;">`
+            return `<div class="lend-row user-row" style="flex-wrap:wrap;">`
                 + `<input ${emailAttrs} placeholder="メールアドレス" value="${escHtml(u.email)}">`
                 + `<input style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="漢字名" value="${escHtml(u.name)}" onchange="userAdminState[${i}].name = this.value">`
                 + `<input style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="グループ" value="${escHtml(u.group)}" onchange="userAdminState[${i}].group = this.value">`
@@ -2688,8 +2755,8 @@
         let roomStatusMap = {};
         try { roomStatusMap = JSON.parse(first.部屋ステータス || '{}') || {}; } catch(e) { roomStatusMap = {}; }
         const hideNum = String(first.部屋番号非表示) === '1';
-        // 個人宅（V列の部屋番号リスト）→ セルに🏠を付ける集合
-        const personalSet = new Set(String(first.個人宅 || '').split(',').map(s => parseInt(s)).filter(n => !isNaN(n)));
+        // 個人宅/会社（V列）→ {部屋番号:'p'|'c'} に展開し、セルにアイコンを付ける
+        const roomMarkMap = parseRoomMarks(first.個人宅);
         const memoText = cleanMemo(first);
         const memoCls = memoText.trim() ? '' : ' memo-empty'; // 空メモは簡易表示で隠す
 
@@ -2705,7 +2772,7 @@
                     const st = roomStatusMap[roomNum];
                     const v = roomVisual(st);
                     let label = (st === '訪問拒否' || st === '外国語') ? '☆' : (hideNum ? cornerLabel(f, r, floors, maxRoom) : String(roomNum));
-                    if (personalSet.has(roomNum)) label = '🏠<span style="font-size:10px;">個人</span>'; // 個人宅は家アイコン＋小さく「個人」
+                    if (roomMarkMap[roomNum]) label = roomMarkLabel(roomMarkMap[roomNum]); // 個人宅=🏠／会社=🏢
                     gridHtml += `<td class="cell-active" data-room="${roomNum}" style="min-width:40px; background:${v.bg}; color:${v.color};" onclick="showRoomAction(${first.rowNumber}, ${roomNum}, this)">${label}</td>`;
                 } else {
                     gridHtml += `<td class="cell-inactive"></td>`;
@@ -2755,7 +2822,7 @@
         const maxRoom = parseInt(item.最大部屋番号) || 1;
         // 現在の有効部屋を選択状態に設定
         gridActiveRooms = String(item.有効部屋リスト || '').split(',').map(s => parseInt(s)).filter(n => !isNaN(n));
-        gridPersonalRooms = String(item.個人宅 || '').split(',').map(s => parseInt(s)).filter(n => !isNaN(n));
+        gridRoomMark = parseRoomMarks(item.個人宅);
 
         const lock = getAutolock(item);
         const memoText = cleanMemo(item);
@@ -2821,7 +2888,7 @@
             lock: document.getElementById('new-lock').value,
             memo: document.getElementById('new-memo').value,
             hideRoomNum: isHideRoomNum(),
-            personalRooms: gridPersonalRooms.filter(rn => valid.includes(rn)).join(',')
+            personalRooms: encodeRoomMarks(gridRoomMark, valid)
         };
 
         btn.disabled = true; btn.innerText = '保存中...';
