@@ -193,29 +193,34 @@
         body.is-admin .menu-item.admin-only { display: block; background: #eef4f7; border-left: 3px solid #5E9DB8; } /* 管理項目は淡い青＋左の青帯で通常項目と区別 */
         .menu-section { display: none; font-size: 11px; color: #7f8c93; font-weight: bold; padding: 9px 12px 3px; border-top: 1px solid #e1e6e9; margin-top: 4px; } /* 管理者メニューの見出し（adminのみ） */
         body.is-admin .menu-section { display: block; }
-        /* 印刷用表示（admin・PC/タブレットのみ。赤枠内のピンを白黒のSVG図で表示） */
+        /* 印刷用表示（admin・PC/タブレット。A4横・左=詳細地図/右=広域地図・白黒・大きめ文字。年配者向け） */
         @media (max-width: 768px) { body.is-admin .menu-item.pc-only { display: none; } } /* スマホでは出さない */
-        #print-view { display: none; position: fixed; inset: 0; z-index: 10010; background: #fff; color: #000; overflow: auto; padding: 16px 20px; }
-        .print-head { font-size: 16px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
-        .print-legend { font-size: 11px; border: 1px solid #000; padding: 6px 8px; margin-bottom: 10px; line-height: 1.8; }
-        .print-map { border: 1px solid #000; padding: 6px; margin-bottom: 12px; text-align: center; }
-        .print-section-title { font-size: 14px; font-weight: bold; margin: 10px 0 6px; border-bottom: 1px solid #000; }
-        .print-cards { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
-        .print-card { border: 1px solid #000; padding: 6px 8px; break-inside: avoid; }
-        .print-card-h { font-weight: bold; font-size: 13px; }
-        .print-card-sub { font-size: 10px; color: #333; margin-bottom: 4px; }
-        .print-grid { border-collapse: collapse; }
-        .print-grid td { border: 1px solid #000; width: 34px; height: 30px; text-align: center; vertical-align: middle; padding: 0; }
-        .print-grid td.pf { background: #000; color: #fff; font-size: 10px; width: 22px; }
+        #print-view { display: none; position: fixed; inset: 0; z-index: 10010; background: #fff; color: #000; overflow: auto; padding: 14px 18px; }
+        #print-view * { box-sizing: border-box; }
+        .print-head { font-size: 22px; font-weight: bold; border-bottom: 3px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
+        .print-legend { font-size: 15px; border: 1.5px solid #000; padding: 8px 10px; margin-bottom: 10px; line-height: 1.9; }
+        .print-main { display: flex; gap: 14px; align-items: flex-start; }
+        .print-left, .print-right { flex: 0 0 auto; }
+        .print-panel-title { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
+        .print-map-wrap { position: relative; border: 1.5px solid #000; overflow: hidden; }
+        .print-map-wrap img.basemap { display: block; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) contrast(1.05); }
+        .print-map-wrap .ov { position: absolute; inset: 0; pointer-events: none; }
+        .print-credit { font-size: 10px; color: #666; margin-top: 4px; }
+        .print-card { position: absolute; background: rgba(255,255,255,0.96); border: 1.5px solid #000; border-radius: 3px; padding: 3px 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.35); }
+        .print-card-h { font-weight: bold; font-size: 14px; white-space: nowrap; }
+        .print-grid { border-collapse: collapse; margin-top: 2px; }
+        .print-grid td { border: 1px solid #000; width: 40px; height: 36px; text-align: center; vertical-align: middle; padding: 0; }
+        .print-grid td.pf { background: #000; color: #fff; font-size: 12px; width: 26px; }
         .print-grid td.pe { border: none; }
-        .print-grid td.pv { background: #dcdcdc; } /* 訪問済み＝網掛け（白黒でも進捗が分かる） */
-        .print-grid .pn { font-size: 9px; line-height: 1; color: #333; }
-        .print-grid .ps { font-size: 12px; font-weight: bold; line-height: 1.15; }
+        .print-grid td.pv { background: #d6d6d6; } /* 訪問済み＝網掛け */
+        .print-grid .pn { font-size: 11px; line-height: 1; color: #333; }
+        .print-grid .ps { font-size: 16px; font-weight: bold; line-height: 1.15; }
         @media print {
+            @page { size: A4 landscape; margin: 8mm; }
             body.printing > *:not(#print-view) { display: none !important; }
             #print-view { position: static !important; overflow: visible !important; padding: 0 !important; }
             .print-hide { display: none !important; }
-            .print-grid td.pf, .print-grid td.pv { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .print-grid td.pf, .print-grid td.pv, .print-map-wrap img.basemap { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
         #app-modal { position: absolute; inset: 0; z-index: 10003; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; padding: 16px; touch-action: pan-x pan-y; }
         #app-modal-card { background: #fff; border-radius: 10px; width: min(430px, 94vw); max-height: 84vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
@@ -2442,8 +2447,30 @@
         body.innerHTML = html;
     }
 
-    // ── 管理: 印刷用表示（admin・PC/タブレット）。現在の赤枠内のピンを最終時点の状態で白黒SVG図に描き、
-    //    集合住宅の部屋詳細は枠の外（下）にカードで並べる。実際の印刷はブラウザ(Ctrl+P)に任せる。
+    // ── 管理: 印刷用表示（admin・PC/タブレット）。A4横で 左=詳細地図（実地図＋赤枠＋ピン＋集合住宅カード）/ 右=広域地図。白黒・大きめ。
+    //    実地図は Mapbox Static Images API のラスター画像（WebGLの生地図は印刷に弱いため）。重ね物は同じWebメルカトル投影で位置合わせ。
+    const PRINT_STYLE = 'mapbox/light-v11'; // 白黒印刷で見やすい淡色スタイル
+    function staticMapUrl_(lng, lat, zoom, w, h) {
+        return 'https://api.mapbox.com/styles/v1/' + PRINT_STYLE + '/static/'
+            + lng.toFixed(6) + ',' + lat.toFixed(6) + ',' + zoom.toFixed(2) + '/' + w + 'x' + h + '@2x'
+            + '?logo=false&attribution=false&access_token=' + encodeURIComponent(mapboxgl.accessToken);
+    }
+    // 中心・ズーム・画像サイズから 緯度経度→ピクセル の投影を作る（Mapbox Static と同じ Webメルカトル / 512pxタイル）
+    function mercProjector_(cLng, cLat, zoom, w, h) {
+        const ws = 512 * Math.pow(2, zoom);
+        const wx = lng => (lng + 180) / 360 * ws;
+        const wy = lat => { const s = Math.sin(lat * Math.PI / 180); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * ws; };
+        const cx = wx(cLng), cy = wy(cLat);
+        return { x: lng => w / 2 + (wx(lng) - cx), y: lat => h / 2 + (wy(lat) - cy) };
+    }
+    // bbox[w,s,e,n] を画像内に padding率 f で収めるズーム
+    function fitZoom_(w, s, e, n, imgW, imgH, f) {
+        const wx = lng => (lng + 180) / 360 * 512;
+        const wy = lat => { const si = Math.sin(lat * Math.PI / 180); return (0.5 - Math.log((1 + si) / (1 - si)) / (4 * Math.PI)) * 512; };
+        const spanX = Math.max(wx(e) - wx(w), 1e-9), spanY = Math.max(wy(s) - wy(n), 1e-9);
+        return Math.max(0, Math.min(19, Math.log2(Math.min(imgW * f / spanX, imgH * f / spanY))));
+    }
+
     function showPrintView() {
         if (!currentBoxFeature || !currentBoxFeature.geometry || !currentBoxFeature.geometry.coordinates) {
             appAlert('先に番地（赤枠）を表示してから「印刷用表示」を開いてください。\n吹き出しの住所や番地ボタンをタップすると赤枠が出ます。');
@@ -2452,7 +2479,6 @@
         const ring = currentBoxFeature.geometry.coordinates[0];
         if (!ring || ring.length < 3) { appAlert('赤枠の形が取得できませんでした。'); return; }
 
-        // 枠内のピンを最終時点の状態で抽出
         const pins = (currentData || []).filter(d => {
             const lng = parseFloat(d.経度), lat = parseFloat(d.緯度);
             return !isNaN(lng) && !isNaN(lat) && lng !== 0 && lat !== 0 && pointInRing(lng, lat, ring);
@@ -2460,46 +2486,75 @@
         const kodate = pins.filter(d => d.種別 !== '集合住宅');
         const shuga = pins.filter(d => d.種別 === '集合住宅');
 
-        // 投影範囲（枠＋ピンを内包）。緯度経度→SVG座標（緯度は上が大、経度はcos補正で縦横比を保つ）
-        let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
-        const ext = (x, y) => { minLng = Math.min(minLng, x); maxLng = Math.max(maxLng, x); minLat = Math.min(minLat, y); maxLat = Math.max(maxLat, y); };
+        // bbox[w,s,e,n]（枠＋ピンを内包）と中心
+        let w = Infinity, e = -Infinity, s = Infinity, n = -Infinity;
+        const ext = (x, y) => { w = Math.min(w, x); e = Math.max(e, x); s = Math.min(s, y); n = Math.max(n, y); };
         ring.forEach(p => ext(p[0], p[1]));
         pins.forEach(d => ext(+d.経度, +d.緯度));
-        const cosLat = Math.cos((minLat + maxLat) / 2 * Math.PI / 180) || 1;
-        const lngSpan = Math.max(maxLng - minLng, 1e-6), latSpan = Math.max(maxLat - minLat, 1e-6);
-        const pad = 28, innerW = 700, scale = innerW / (lngSpan * cosLat);
-        const svgW = innerW + pad * 2, svgH = latSpan * scale + pad * 2;
-        const X = lng => (pad + (lng - minLng) * cosLat * scale).toFixed(1);
-        const Y = lat => (pad + (maxLat - lat) * scale).toFixed(1);
+        const cLng = (w + e) / 2, cLat = (s + n) / 2;
 
-        let svg = `<svg viewBox="0 0 ${svgW.toFixed(0)} ${svgH.toFixed(0)}" style="width:100%; height:auto; max-width:${svgW.toFixed(0)}px;">`;
-        svg += `<polygon points="${ring.map(p => X(p[0]) + ',' + Y(p[1])).join(' ')}" fill="#fff" stroke="#000" stroke-width="2.5"/>`;
+        // 詳細地図（左）。枠を画像の約45%に収め、周囲に集合住宅カードの余白を作る
+        const DW = 640, DH = 460;
+        const dZoom = fitZoom_(w, s, e, n, DW, DH, 0.45);
+        const dProj = mercProjector_(cLng, cLat, dZoom, DW, DH);
+        const dUrl = staticMapUrl_(cLng, cLat, dZoom, DW, DH);
+
+        // 赤枠＋ピン＋集合住宅カードの引き出し線（地図画像の上に重ねるSVG）
+        let ovD = `<svg class="ov" viewBox="0 0 ${DW} ${DH}">`;
+        ovD += `<polygon points="${ring.map(p => dProj.x(p[0]).toFixed(1) + ',' + dProj.y(p[1]).toFixed(1)).join(' ')}" fill="rgba(255,255,255,0.12)" stroke="#000" stroke-width="2.5"/>`;
         kodate.forEach(d => {
-            const cx = X(+d.経度), cy = Y(+d.緯度), c = kodateVisual(d).char || '・';
-            svg += `<circle cx="${cx}" cy="${cy}" r="11" fill="#fff" stroke="#000" stroke-width="1.5"/>`
-                + `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="bold" fill="#000">${escHtml(c)}</text>`;
+            const cx = dProj.x(+d.経度).toFixed(1), cy = dProj.y(+d.緯度).toFixed(1), c = kodateVisual(d).char || '・';
+            ovD += `<circle cx="${cx}" cy="${cy}" r="11" fill="#fff" stroke="#000" stroke-width="1.5"/>`
+                + `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="bold" fill="#000">${escHtml(c)}</text>`;
         });
+        const nextTop = { L: 6, R: 6 };
+        let cardsHtml = '';
         shuga.forEach((d, i) => {
-            const cx = +X(+d.経度), cy = +Y(+d.緯度), n = i + 1;
-            svg += `<rect x="${(cx - 12).toFixed(1)}" y="${(cy - 12).toFixed(1)}" width="24" height="24" rx="3" fill="#fff" stroke="#000" stroke-width="2"/>`
-                + `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="bold" fill="#000">${n}</text>`;
+            const bx = dProj.x(+d.経度), by = dProj.y(+d.緯度), num = i + 1;
+            ovD += `<rect x="${(bx - 12).toFixed(1)}" y="${(by - 12).toFixed(1)}" width="24" height="24" rx="3" fill="#fff" stroke="#000" stroke-width="2"/>`
+                + `<text x="${bx.toFixed(1)}" y="${by.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="bold" fill="#000">${num}</text>`;
+            const floors = parseInt(d.階数 || 1), maxRoom = parseInt(d.最大部屋番号 || 1);
+            const estW = Math.min(maxRoom, 6) * 40 + 30, estH = Math.min(floors, 8) * 36 + 34;
+            const side = bx < DW / 2 ? 'L' : 'R';
+            let top = nextTop[side];
+            if (top + estH > DH - 6) top = Math.max(6, DH - estH - 6);
+            nextTop[side] = top + estH + 8;
+            const lx = side === 'L' ? 6 + estW : DW - 6 - estW, ly = top + 12;
+            ovD += `<line x1="${bx.toFixed(1)}" y1="${by.toFixed(1)}" x2="${lx.toFixed(1)}" y2="${ly.toFixed(1)}" stroke="#000" stroke-width="1"/>`;
+            cardsHtml += `<div class="print-card" style="top:${top}px; ${side === 'L' ? 'left:6px;' : 'right:6px;'}">`
+                + `<div class="print-card-h">${num}. ${escHtml(d['建物名 / 世帯名'] || '')}</div>`
+                + printRoomGrid(d) + `</div>`;
         });
-        svg += `</svg>`;
+        ovD += `</svg>`;
+
+        // 広域地図（右）。同じ中心を引いて、詳細範囲を四角＋中心点で示す
+        const OW = 330, OH = 460;
+        const oZoom = Math.max(11, dZoom - 3.5);
+        const oProj = mercProjector_(cLng, cLat, oZoom, OW, OH);
+        const oUrl = staticMapUrl_(cLng, cLat, oZoom, OW, OH);
+        const rectPts = [[w, n], [e, n], [e, s], [w, s]].map(p => oProj.x(p[0]).toFixed(1) + ',' + oProj.y(p[1]).toFixed(1)).join(' ');
+        const ovO = `<svg class="ov" viewBox="0 0 ${OW} ${OH}">`
+            + `<polygon points="${rectPts}" fill="rgba(0,0,0,0.06)" stroke="#000" stroke-width="2.5"/>`
+            + `<circle cx="${oProj.x(cLng).toFixed(1)}" cy="${oProj.y(cLat).toFixed(1)}" r="5" fill="#000"/></svg>`;
 
         const now = new Date();
         const head = `${escHtml(currentBoxAddr || '（番地）')}　／　戸建て ${kodate.length}・集合住宅 ${shuga.length}　／　${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} 時点`;
-        const legend = `<div class="print-legend"><b>凡例</b>　○=戸建て　□=集合住宅（番号は下の詳細と対応）　｜　`
+        const legend = `<div class="print-legend"><b>凡例</b>　○=戸建て　□=集合住宅（番号は地図上のカードと対応）　｜　`
             + `会=会えた　数字=不在（回数）　投=投函　拒=訪問拒否　外=外国語　空=空き家　他=その他　未/空欄=未訪問　｜　個=個人宅　会社=会社　｜　網掛け=訪問済み</div>`;
-        const cards = shuga.map((d, i) => printShugaCard(d, i + 1)).join('');
 
         document.getElementById('print-view-body').innerHTML =
             `<div class="print-hide" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:10px;">`
-            + `<div style="font-size:12px; color:#666;">ブラウザの印刷（Ctrl+P）で白黒印刷できます。網掛けも出すには印刷設定で「背景のグラフィック」をオンにしてください。</div>`
-            + `<button onclick="closePrintView()" style="font-size:15px; padding:6px 14px; border:1px solid #999; border-radius:6px; background:#f4f4f4; cursor:pointer; flex-shrink:0;">✕ 閉じる</button></div>`
+            + `<div style="font-size:13px; color:#666;">ブラウザの印刷（Ctrl+P）で <b>A4・横</b>・白黒で印刷できます。地図/網掛けを出すには印刷設定で「背景のグラフィック」をオンに。</div>`
+            + `<button onclick="closePrintView()" style="font-size:16px; padding:7px 16px; border:1px solid #999; border-radius:6px; background:#f4f4f4; cursor:pointer; flex-shrink:0;">✕ 閉じる</button></div>`
             + `<div class="print-head">${head}</div>`
             + legend
-            + `<div class="print-map">${svg}</div>`
-            + (shuga.length ? `<div class="print-section-title">集合住宅の詳細</div><div class="print-cards">${cards}</div>` : '');
+            + `<div class="print-main">`
+            + `<div class="print-left"><div class="print-panel-title">この番地の詳細</div>`
+            + `<div class="print-map-wrap" style="width:${DW}px; height:${DH}px;"><img class="basemap" src="${dUrl}" alt="">${ovD}${cardsHtml}</div></div>`
+            + `<div class="print-right"><div class="print-panel-title">広域（位置の目安）</div>`
+            + `<div class="print-map-wrap" style="width:${OW}px; height:${OH}px;"><img class="basemap" src="${oUrl}" alt="">${ovO}</div></div>`
+            + `</div>`
+            + `<div class="print-credit">地図 © Mapbox © OpenStreetMap</div>`;
 
         document.getElementById('print-view').style.display = 'block';
         document.body.classList.add('printing');
@@ -2511,8 +2566,8 @@
         document.body.classList.remove('printing');
         document.removeEventListener('keydown', printEscHandler, true);
     }
-    // 集合住宅1棟の部屋グリッド（白黒・印刷用）。番号=SVG上の□と対応。各セルは部屋番号＋状態記号、訪問済みは網掛け。
-    function printShugaCard(item, num) {
+    // 集合住宅1棟の部屋グリッド（白黒・印刷用）。各セルは部屋番号＋状態記号、訪問済みは網掛け。
+    function printRoomGrid(item) {
         const floors = parseInt(item.階数 || 1), maxRoom = parseInt(item.最大部屋番号 || 1);
         const valid = String(item.有効部屋リスト || '').split(',').map(Number);
         let map = {}; try { map = JSON.parse(item.部屋ステータス || '{}') || {}; } catch (e) { map = {}; }
@@ -2532,11 +2587,7 @@
             }
             grid += '</tr>';
         }
-        grid += '</tbody></table>';
-        const addr = (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? item.住所 : (deriveAddress(+item.経度, +item.緯度) || '');
-        return `<div class="print-card"><div class="print-card-h">${num}. ${escHtml(item['建物名 / 世帯名'] || '')}</div>`
-            + (addr ? `<div class="print-card-sub">${escHtml(addr)}</div>` : '')
-            + grid + `</div>`;
+        return grid + '</tbody></table>';
     }
 
     function showMyAreas() {
