@@ -203,7 +203,7 @@
         .print-left, .print-right { flex: 0 0 auto; }
         .print-panel-title { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
         .print-map-wrap { position: relative; border: 1.5px solid #000; overflow: hidden; }
-        .print-map-wrap img.basemap { display: block; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) contrast(1.05); } /* アプリ用スタイル(B案)を白黒化。明暗はスタイル依存＝必要なら専用スタイル(A案)で調整 */
+        .print-map-wrap img.basemap { display: block; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) brightness(0.95) contrast(1.15); } /* 建物が見える程度の白黒化（飛ばし過ぎない）。クリーンな白背景＋建物線はA案の専用スタイルで */
         .print-map-wrap .ov { position: absolute; inset: 0; pointer-events: none; }
         .print-credit { font-size: 10px; color: #666; margin-top: 4px; }
         .print-card { position: absolute; background: rgba(255,255,255,0.96); border: 1.5px solid #000; border-radius: 3px; padding: 3px 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.35); }
@@ -2449,7 +2449,7 @@
 
     // ── 管理: 印刷用表示（admin・PC/タブレット）。A4横で 左=詳細地図（実地図＋赤枠＋ピン＋集合住宅カード）/ 右=広域地図。白黒・大きめ。
     //    実地図は Mapbox Static Images API のラスター画像（WebGLの生地図は印刷に弱いため）。重ね物は同じWebメルカトル投影で位置合わせ。
-    const PRINT_STYLE = 'toruo1104/cmq7cda6y001g01sqf3aogpwy'; // 当面はアプリ用スタイルを流用(B案)。印刷専用スタイル(A案)ができたらそのID('toruo1104/xxxx')に差し替え
+    const PRINT_STYLE = 'mapbox/light-v11'; // 暫定: 建物＋号の両方を描ける既製スタイル。印刷専用スタイル(A案)ができたら 'toruo1104/xxxx' に差し替え
     function staticMapUrl_(lng, lat, zoom, w, h) {
         return 'https://api.mapbox.com/styles/v1/' + PRINT_STYLE + '/static/'
             + lng.toFixed(6) + ',' + lat.toFixed(6) + ',' + zoom.toFixed(2) + '/' + w + 'x' + h + '@2x'
