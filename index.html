@@ -249,15 +249,17 @@
         .lend-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px dashed #e3e3e3; }
         .lend-row .grow { flex: 1; min-width: 0; }
         /* ユーザー管理は1行=1ユーザー。区切りをはっきりさせる（濃い実線） */
-        .user-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; border: 1px solid #ccd2d8; border-radius: 8px; padding: 10px; margin-bottom: 8px; background: #fff; }
-        .user-row.ua-owner { background: #eceef0; }
-        .user-row.ua-inactive { opacity: 0.6; background: #f1f2f4; }
-        .user-row .ua-email { flex: 1 1 100%; min-width: 0; }
-        .user-row .ua-name { flex: 1 1 84px; min-width: 76px; }
-        .user-row .ua-group { flex: 1 1 110px; min-width: 92px; }
-        .user-row .ua-status { flex: 0 0 auto; }
-        .user-row .ua-role { flex: 1 1 130px; min-width: 116px; }
-        .user-row .ua-del { flex: 0 0 auto; }
+        .user-row { display: flex; flex-direction: column; gap: 6px; border: 1px solid #c4ccd3; border-radius: 8px; padding: 10px; margin-bottom: 8px; background: #eef4f8; }
+        .user-row.ua-owner { background: #e6e9ec; }
+        .user-row.ua-inactive { opacity: 0.6; background: #eceef0; }
+        .ua-row1 { display: flex; gap: 8px; }
+        .ua-row1 .ua-email { flex: 3 1 0; min-width: 0; }
+        .ua-row1 .ua-name { flex: 2 1 0; min-width: 0; }
+        .ua-row2 { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .ua-row2 .ua-group { flex: 1 1 120px; min-width: 96px; }
+        .ua-row2 .ua-status { flex: 0 0 auto; }
+        .ua-row2 .ua-role { flex: 1 1 140px; min-width: 116px; }
+        .ua-row2 .ua-del { flex: 0 0 auto; margin-left: auto; }
         .ua-filter { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
         .ua-filter #ua-filter-q { flex: 2; min-width: 130px; }
         #ua-filter-count { font-size: 12px; color: #666; white-space: nowrap; }
@@ -2933,16 +2935,16 @@
     }
     function renderUserAdmin() {
         const body = document.getElementById('app-modal-body');
-        let html = '<div style="font-size:12px; color:#666; margin-bottom:8px;">保存すると、この一覧の内容で<b>スプレッドシートの共有も更新</b>されます（追加=招待・削除=解除）。<br><b>無効</b>＝行は残したまま<b>アプリのログインだけ拒否</b>（共有はそのまま。いつでも有効に戻せます）。</div>';
+        let html = '';
         const _uf = userAdminFilter;
         const groups = Array.from(new Set(userAdminState.map(u => String(u.group || '').trim()).filter(Boolean))).sort();
         const gOpt = cur => groups.map(g => `<option value="${escHtml(g)}" ${String(cur) === g ? 'selected' : ''}>${escHtml(g)}</option>`).join('');
         // フィルタ：メール/名前は検索（記入）、グループ・権限・状態は選択
         html += '<div class="ua-filter">'
             + `<input id="ua-filter-q" placeholder="🔍 メール／名前 で検索" value="${escHtml(_uf.q)}" oninput="userAdminFilter.q = this.value; applyUserFilter();">`
-            + `<select id="ua-filter-group" style="${groupStyleStr(_uf.group)}" onchange="userAdminFilter.group = this.value; applyUserFilter();"><option value="">全グループ</option>${gOpt(_uf.group)}</select>`
-            + `<select id="ua-filter-role" style="${roleStyleStr(_uf.role)}" onchange="userAdminFilter.role = this.value; applyUserFilter();"><option value="">全権限</option><option value="user" ${_uf.role === 'user' ? 'selected' : ''}>一般</option><option value="lender" ${_uf.role === 'lender' ? 'selected' : ''}>貸出係</option><option value="manager" ${_uf.role === 'manager' ? 'selected' : ''}>管理者</option><option value="sysadmin" ${_uf.role === 'sysadmin' ? 'selected' : ''}>システム管理者</option></select>`
-            + `<select id="ua-filter-status" onchange="userAdminFilter.status = this.value; applyUserFilter();"><option value="">全状態</option><option value="active" ${_uf.status === 'active' ? 'selected' : ''}>有効</option><option value="inactive" ${_uf.status === 'inactive' ? 'selected' : ''}>無効</option></select>`
+            + `<select id="ua-filter-group" style="${groupStyleStr(_uf.group)}" onchange="userAdminFilter.group = this.value; applyUserFilter();"><option value="">グループ選択</option>${gOpt(_uf.group)}</select>`
+            + `<select id="ua-filter-role" style="${roleStyleStr(_uf.role)}" onchange="userAdminFilter.role = this.value; applyUserFilter();"><option value="">権限選択</option><option value="user" ${_uf.role === 'user' ? 'selected' : ''}>一般</option><option value="lender" ${_uf.role === 'lender' ? 'selected' : ''}>貸出係</option><option value="manager" ${_uf.role === 'manager' ? 'selected' : ''}>管理者</option><option value="sysadmin" ${_uf.role === 'sysadmin' ? 'selected' : ''}>システム管理者</option></select>`
+            + `<select id="ua-filter-status" onchange="userAdminFilter.status = this.value; applyUserFilter();"><option value="">有効・無効</option><option value="active" ${_uf.status === 'active' ? 'selected' : ''}>有効</option><option value="inactive" ${_uf.status === 'inactive' ? 'selected' : ''}>無効</option></select>`
             + '<span id="ua-filter-count"></span>'
             + '</div>';
         html += `<datalist id="ua-group-list">${groups.map(g => `<option value="${escHtml(g)}">`).join('')}</datalist>`;
@@ -2961,13 +2963,15 @@
             const statusSel = `<select data-uf="status" class="ua-status" ${isOwner ? 'disabled' : ''} style="${inactive ? 'color:#C75F56; font-weight:bold;' : ''}" onchange="userAdminState[${i}].active = (this.value === '1'); renderUserAdmin();"><option value="1" ${!inactive ? 'selected' : ''}>有効</option><option value="0" ${inactive ? 'selected' : ''}>無効</option></select>`;
             const roleSel = `<select data-uf="role" class="ua-role" style="${isOwner ? '' : roleStyleStr(u.role)}" ${isOwner ? 'disabled' : ''} onchange="userAdminState[${i}].role = this.value; renderUserAdmin();"><option value="user" ${u.role === 'user' ? 'selected' : ''}>一般</option><option value="lender" ${u.role === 'lender' ? 'selected' : ''}>貸出係</option><option value="manager" ${u.role === 'manager' ? 'selected' : ''}>管理者</option><option value="sysadmin" ${u.role === 'sysadmin' ? 'selected' : ''}>システム管理者</option></select>`;
             return `<div class="user-row${isOwner ? ' ua-owner' : ''}${inactive ? ' ua-inactive' : ''}">`
+                + `<div class="ua-row1">`
                 + emailIn
                 + `<input data-uf="name" class="ua-name" placeholder="漢字名" value="${escHtml(u.name)}" onchange="userAdminState[${i}].name = this.value">`
+                + `</div><div class="ua-row2">`
                 + `<input data-uf="group" class="ua-group" list="ua-group-list" style="${groupStyleStr(u.group)}" placeholder="グループ" value="${escHtml(u.group)}" onchange="userAdminState[${i}].group = this.value; renderUserAdmin();">`
                 + statusSel
                 + roleSel
                 + (isOwner ? '' : `<button class="clear-btn ua-del" onclick="userAdminState.splice(${i}, 1); renderUserAdmin();">削除</button>`)
-                + `</div>`;
+                + `</div></div>`;
         }).join('');
         html += '<div style="display:flex; gap:8px; margin-top:10px;">'
             + `<button class="choice-btn" style="flex:1; background:#eef3f6;" onclick="userAdminState.push({email:'',name:'',group:'',role:'user',active:true}); renderUserAdmin();">＋ 行を追加</button>`
