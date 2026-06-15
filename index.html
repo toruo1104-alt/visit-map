@@ -2501,9 +2501,9 @@
         ring.forEach(p => ext(p[0], p[1]));
         pins.forEach(d => ext(+d.経度, +d.緯度));
         const cLng = (w + e) / 2, cLat = (s + n) / 2;
-        // 枠が縦長（高さ/幅 > 1.8）なら印刷を縦向きに。横長・正方形は横向き。
+        // 枠が縦長（高さ/幅 > 1.6）なら印刷を縦向きに。横長・正方形は横向き。
         const spanXm = (e - w) * Math.cos(cLat * Math.PI / 180), spanYm = (n - s);
-        const portrait = (spanYm / Math.max(spanXm, 1e-9)) > 1.8;
+        const portrait = (spanYm / Math.max(spanXm, 1e-9)) > 1.6;
 
         // 詳細地図（全幅）。集合住宅カードの幅だけ左右に余白を確保し、その「中央領域」に枠をギリギリまで大きく収める。
         // カードは必ず余白帯（枠の左右外側）に置く＝赤枠とカードは重ならない。向きに合わせて紙サイズを切替。
@@ -2549,13 +2549,11 @@
         });
         ovD += `</svg>`;
 
-        const now = new Date();
-        const head = `${escHtml(currentBoxAddr || '（番地）')}　／　戸建て ${kodate.length}・集合住宅 ${shuga.length}　／　${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} 時点`;
+        const head = escHtml(currentBoxAddr || '（番地）'); // 見出しは番地のみ（件数・日付は出さない）
 
         document.getElementById('print-view-body').innerHTML =
-            `<div class="print-hide" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:10px;">`
-            + `<div style="font-size:13px; color:#666;">ブラウザの印刷（Ctrl+P）で <b>A4・横</b>・白黒で印刷できます。地図を出すには印刷設定で「背景のグラフィック」をオンに。（○=戸建て / □＋番号=集合住宅 / 拒=訪問拒否・外=外国語）</div>`
-            + `<button onclick="closePrintView()" style="font-size:16px; padding:7px 16px; border:1px solid #999; border-radius:6px; background:#f4f4f4; cursor:pointer; flex-shrink:0;">✕ 閉じる</button></div>`
+            `<div class="print-hide" style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:8px;">`
+            + `<button onclick="closePrintView()" style="font-size:16px; padding:7px 16px; border:1px solid #999; border-radius:6px; background:#f4f4f4; cursor:pointer;">✕ 閉じる</button></div>`
             + `<div class="print-head">${head}</div>`
             + `<div class="print-map-wrap" style="width:${DW}px; height:${DH}px;"><img class="basemap" src="${dUrl}" alt="">${ovD}${cardsHtml}</div>`
             + `<div class="print-credit">地図 © Mapbox © OpenStreetMap</div>`;
