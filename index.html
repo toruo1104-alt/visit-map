@@ -2891,12 +2891,12 @@
                     ? `<span style="color:#C75F56;">貸出中（${a.lendCount || 1}回目）: ${escHtml(who)}（${escHtml(a.lendDate || '-')} → <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span>）</span>`
                     : `<span style="color:#555;">最終返却日: ${escHtml(a.lastReturn || 'なし')}　これまで ${a.lendCount || 0} 回</span>`;
                 const off = lent2 || !canLend;
-                const dateInput = lent2 ? '' : `<input type="date" id="lend-due-${a.id}" value="${lendDefaultDue()}" style="font-size:12px; padding:2px 4px; width:120px; margin-left:8px; vertical-align:middle;">`; // 未貸出のみ。状態行の「これまでX回」の右に小さく表示
+                const dateInput = lent2 ? '' : `<span style="margin-left:8px; color:#555;">貸出期限</span><input type="date" id="lend-due-${a.id}" value="${lendDefaultDue()}" style="font-size:12px; padding:2px 4px; width:106px; margin-left:4px; vertical-align:middle;">`; // 未貸出のみ。状態行の「これまでX回」の右に「貸出期限＋日付」を小さく表示
                 return `<div class="lend-item">`
                     + `<div style="display:flex; gap:6px; align-items:center;">`
                     + `<div style="flex:1; min-width:0;"><b style="font-size:15px;">${escHtml(num)}</b><span style="color:#777; font-size:12px;">（${a.count === '' || a.count == null ? '-' : a.count}件）</span></div>`
-                    + `<button class="choice-btn" style="flex:0 0 auto; background:#eef3f6; padding:6px 12px;" onclick="previewLendArea(${a.id})">地図</button>`
-                    + `<button class="choice-btn" style="flex:0 0 auto; padding:6px 18px; ${off ? 'background:#b9c2c8; border-color:#b9c2c8; color:#f0f0f0; cursor:not-allowed;' : 'background:#5E9DB8; border-color:#5E9DB8; color:#fff;'}" onclick="doLendArea(${a.id})" ${off ? 'disabled' : ''}>貸出</button>`
+                    + `<button class="choice-btn" style="flex:0 0 auto; width:104px; padding:6px 0; white-space:nowrap; background:#eef3f6;" onclick="previewLendArea(${a.id})">地図プレビュー</button>`
+                    + `<button class="choice-btn" style="flex:0 0 auto; width:104px; padding:6px 0; white-space:nowrap; ${off ? 'background:#b9c2c8; border-color:#b9c2c8; color:#f0f0f0; cursor:not-allowed;' : 'background:#5E9DB8; border-color:#5E9DB8; color:#fff;'}" onclick="doLendArea(${a.id})" ${off ? 'disabled' : ''}>貸出</button>`
                     + `</div>`
                     + `<div style="font-size:12px; margin-top:4px;">${statusHtml}${dateInput}</div>`
                     + `</div>`;
