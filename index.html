@@ -87,6 +87,12 @@
         .area-map .dist:active { fill: #5E9DB8; }
         .area-map .lbl { fill: #102733; font-size: 38px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; pointer-events: none; user-select: none; }
         .area-map .lbl.sm { font-size: 34px; }
+        /* 全体利用の区域：地区グリッド（地区名＋貸出中数） */
+        .shared-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .shared-grid .shared-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 10px 4px; }
+        .shared-cell .sc-name { font-size: 14px; }
+        .shared-cell .sc-num { font-size: 20px; font-weight: bold; }
+        .shared-cell.is-empty { background: #c7cdd1; color: #eef0f1; cursor: default; }
         /* 移動後の地域名ラベル（画面上部・常時表示・タップで枠/表示を消去） */
         #area-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999; background: rgba(44,62,80,0.92); color: #fff; font-weight: bold; font-size: 14px; padding: 8px 16px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); max-width: 92%; text-align: center; cursor: pointer; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
 
@@ -323,7 +329,8 @@
 
 <!-- メニューパネル（割り当て区域／管理機能／サインアウト。管理項目は admin のみ表示） -->
 <div id="menu-panel">
-    <button class="menu-item" onclick="closeMenu(); showMyAreas();">📋 割り当て区域</button>
+    <button class="menu-item" onclick="closeMenu(); showMyAreas();">📋 個人・グループの区域</button>
+    <button class="menu-item" onclick="closeMenu(); showSharedAreas();">🌐 全体利用の区域</button>
     <button class="menu-item" onclick="event.stopPropagation(); closeMenu(); toggleLegend();">🗺 凡例</button>
     <div class="menu-section">管理メニュー</div>
     <button class="menu-item need-lend" onclick="closeMenu(); showLendScreen();">🗂 区域の貸出・返却</button>
@@ -1027,6 +1034,7 @@
     let areaViewMode = localStorage.getItem('vm_areaView') || 'map'; // 'map'=地区図 / 'list'=一覧グリッド
     // 一覧グリッドの並び順（3列×4行で江戸川区の地図配置に近づけた）
     const AREA_GRID_ORDER = ['東松本','南小岩','東小岩','鹿骨町','鹿骨','北篠崎','新堀','西篠崎','上篠崎','春江町','谷河内','篠崎町'];
+    const SHARED_GROUP_NAME = '全体利用'; // 全体利用（共同利用）の予約グループ名。サーバの SHARED_GROUP_ と必ず一致させる
     function toggleAreaView() {
         areaViewMode = (areaViewMode === 'map') ? 'list' : 'map';
         localStorage.setItem('vm_areaView', areaViewMode);
@@ -2621,7 +2629,7 @@
     }
 
     function showMyAreas() {
-        openAppModal('📋 割り当て区域');
+        openAppModal('📋 個人・グループの区域');
         showBusy('読み込み中…');
         apiCall('getMyAreas', {}).then(list => {
             const body = document.getElementById('app-modal-body');
@@ -2633,15 +2641,110 @@
                 + `<span style="color:#5E9DB8; font-weight:bold;">▶</span></div>`;
             const mine = list.filter(a => a.lentTo !== 'group'); // 自分個人への貸出
             const grp = list.filter(a => a.lentTo === 'group');  // 自分の所属グループへの貸出
-            let html = mine.length ? mine.map(rowHtml).join('') : '<div style="color:#888; padding:8px;">あなた個人への割り当てはありません。</div>';
+            let html = `<div style="font-weight:bold; color:#356B82; padding-bottom:6px; border-bottom:1px solid #b9d6e2; margin-bottom:6px;">👤 個人の区域</div>`;
+            html += mine.length ? mine.map(rowHtml).join('') : '<div style="color:#888; padding:8px;">あなた個人への割り当てはありません。</div>';
             if (grp.length) {
                 html += `<div style="background:#e6f0f5; border:1px solid #9cc3d4; border-left:5px solid #5E9DB8; border-radius:6px; padding:8px; margin-top:16px;">`;
-                html += `<div style="font-weight:bold; padding-bottom:6px; color:#356B82; border-bottom:1px solid #b9d6e2; margin-bottom:4px;">👥 グループへの割り当て（${escHtml(grp[0].group)}）</div>`;
+                html += `<div style="font-weight:bold; padding-bottom:6px; color:#356B82; border-bottom:1px solid #b9d6e2; margin-bottom:4px;">👥 グループの区域（${escHtml(grp[0].group)}）</div>`;
                 html += grp.map(rowHtml).join('');
                 html += `</div>`;
             }
             body.innerHTML = html;
         }).catch(handleServerError).finally(hideBusy);
+    }
+
+    // ── 全体利用（共同利用）の区域：地区ごとに集計し、一覧／地区マップで表示（閲覧は全員可） ──
+    let sharedState = { areas: [], district: null, view: localStorage.getItem('vm_sharedView') || 'list' };
+    // 区域名（例「東松本1丁目5番」）から地区名を判定（AREA_DATA のキーで最長一致＝「鹿骨町」を「鹿骨」より先に）
+    function districtOfArea(area) {
+        const keys = Object.keys(AREA_DATA).sort((a, b) => b.length - a.length);
+        for (let i = 0; i < keys.length; i++) { if (String(area).indexOf(keys[i]) === 0) return keys[i]; }
+        return 'その他';
+    }
+    function toggleSharedView() {
+        sharedState.view = (sharedState.view === 'map') ? 'list' : 'map';
+        localStorage.setItem('vm_sharedView', sharedState.view);
+        renderSharedAreas();
+    }
+    function showSharedAreas() {
+        openAppModal('🌐 全体利用の区域');
+        showBusy('読み込み中…');
+        apiCall('getSharedAreas', {}).then(list => {
+            sharedState.areas = list || [];
+            sharedState.district = null;
+            renderSharedAreas();
+        }).catch(handleServerError).finally(hideBusy);
+    }
+    function renderSharedAreas() {
+        const body = document.getElementById('app-modal-body');
+        const areas = sharedState.areas || [];
+        if (!areas.length) { body.innerHTML = '<div style="color:#888; padding:8px;">現在、全体利用の区域はありません。</div>'; return; }
+        const byDist = {};
+        areas.forEach(a => { const d = districtOfArea(a.area); (byDist[d] = byDist[d] || []).push(a); });
+        // 地区詳細：その地区の貸出中区域の一覧（タップで地図表示）
+        if (sharedState.district) {
+            const d = sharedState.district;
+            const rows = byDist[d] || [];
+            let html = `<button class="choice-btn" style="background:#eef3f6; margin-bottom:8px;" onclick="sharedState.district=null; renderSharedAreas();">← 地区一覧へ戻る</button>`;
+            html += `<div style="font-weight:bold; color:#356B82; margin-bottom:6px;">${escHtml(d)}（貸出中 ${rows.length}）</div>`;
+            html += rows.map(a =>
+                `<div class="lend-row" style="cursor:pointer;" onclick="closeAppModal(); showAssignedArea('${escHtml(a.area)}')">`
+                + `<div class="grow"><b style="font-size:16px;">${escHtml(a.area)}</b>${a.count !== '' && a.count != null ? `<span style="color:#888; font-size:12px;">（${a.count}件）</span>` : ''}<br>`
+                + `<span style="color:#666; font-size:12px;">貸出: ${escHtml(a.lendDate || '-')} ／ 返却期日: <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
+                + `<span style="color:#5E9DB8; font-weight:bold;">▶</span></div>`
+            ).join('');
+            body.innerHTML = html;
+            return;
+        }
+        // 概要：一覧 or 地区マップ（切替）。各地区に貸出中数を表示し、タップでその地区の一覧へ。
+        // AREA_GRID_ORDER/地区マップに無い地区（'その他'等）は埋もれないよう別枠で必ず出す。
+        const extra = Object.keys(byDist).filter(d => AREA_GRID_ORDER.indexOf(d) < 0);
+        const cell = d => { const n = (byDist[d] || []).length;
+            return `<button class="area-opt shared-cell${n ? '' : ' is-empty'}" ${n ? `onclick="sharedState.district='${d}'; renderSharedAreas();"` : 'disabled'}><span class="sc-name">${escHtml(d)}</span><span class="sc-num">${n}</span></button>`; };
+        let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">`
+            + `<span style="font-size:13px; color:#666;">貸出中 計 ${areas.length} 区域</span>`
+            + `<button class="choice-btn" style="background:#eef3f6; padding:4px 12px; min-width:0;" onclick="toggleSharedView()">${sharedState.view === 'map' ? '☰ 一覧' : '🗺 地図'}</button>`
+            + `</div>`;
+        if (sharedState.view === 'map') {
+            html += `<div id="shared-map-host">${AREA_MAP_SVG}</div>`;
+            if (extra.length) html += `<div style="font-size:12px; color:#888; margin:8px 0 4px;">地図にない地区</div><div class="shared-grid">${extra.map(cell).join('')}</div>`;
+            body.innerHTML = html;
+            decorateSharedMap(byDist);
+        } else {
+            html += `<div class="shared-grid">${AREA_GRID_ORDER.map(cell).join('')}${extra.map(cell).join('')}</div>`;
+            body.innerHTML = html;
+        }
+    }
+    // 地区マップSVGを全体利用ビュー用に再利用：クリックを地区選択へ差し替え、各地区に件数ラベルを重ねる
+    function decorateSharedMap(byDist) {
+        const host = document.getElementById('shared-map-host');
+        if (!host) return;
+        const svg = host.querySelector('svg');
+        const NS = 'http://www.w3.org/2000/svg';
+        try {
+        host.querySelectorAll('path.dist').forEach(p => {
+            const name = p.getAttribute('data-name');
+            const n = (byDist[name] || []).length;
+            p.onclick = () => { if (n) { sharedState.district = name; renderSharedAreas(); } };
+            p.style.cursor = n ? 'pointer' : 'default';
+            if (!n) { p.style.fill = '#eef1f3'; p.style.opacity = '0.6'; } // 貸出ありの地区はCSS既定（ホバー反応）を残す
+        });
+        if (svg) host.querySelectorAll('text.lbl').forEach(t => {
+            const name = t.getAttribute('data-name');
+            const n = (byDist[name] || []).length;
+            t.onclick = () => { if (n) { sharedState.district = name; renderSharedAreas(); } };
+            const c = document.createElementNS(NS, 'text');
+            c.setAttribute('x', t.getAttribute('x'));
+            c.setAttribute('y', String(Number(t.getAttribute('y')) + 34));
+            c.setAttribute('text-anchor', 'middle');
+            c.setAttribute('fill', n ? '#C75F56' : '#9aa6ad');
+            c.setAttribute('font-size', '30');
+            c.setAttribute('font-weight', 'bold');
+            c.setAttribute('pointer-events', 'none');
+            c.textContent = n ? (n + '区域') : '0';
+            svg.appendChild(c);
+        });
+        } catch (e) { console.warn('全体利用マップの装飾に失敗しました', e); }
     }
 
     // ── 管理: 区域の貸出・返却 ──
@@ -2658,6 +2761,7 @@
     function lendSel(k, v) {
         lendState.sel[k] = v;
         if (k === 'group') lendState.sel.email = ''; // グループを変えたら「借りる人」選択をリセット
+        if (k === 'group' && v === SHARED_GROUP_NAME) lendState.sel.email = '__GROUP__'; // 全体利用は借りる人を自動で「全体利用」に固定
         if (k === 'district') { lendState.sel.chome = ''; lendState.sel.areaId = ''; }
         if (k === 'chome') lendState.sel.areaId = '';
         renderLendScreen();
@@ -2668,10 +2772,11 @@
     }
     function renderLendScreen() {
         const s = lendState.sel;
+        const isShared = (s.group === SHARED_GROUP_NAME); // 全体利用（共同利用）への割り振りモード
         const body = document.getElementById('app-modal-body');
         const opt = (v, l, cur) => `<option value="${escHtml(String(v))}" ${String(cur) === String(v) ? 'selected' : ''}>${escHtml(String(l))}</option>`;
         const groups = Array.from(new Set(lendState.users.map(u => u.group).filter(Boolean)));
-        const users = lendState.users.filter(u => !s.group || u.group === s.group);
+        const users = isShared ? [] : lendState.users.filter(u => !s.group || u.group === s.group);
         if (s.email && s.email !== '__GROUP__' && !users.some(u => u.email === s.email)) s.email = '';
         const noChome = s.district && AREA_DATA[s.district] === null;
         const chomes = (s.district && !noChome) ? Object.keys(AREA_DATA[s.district]) : [];
@@ -2684,10 +2789,13 @@
         const selArea = lendState.areas.find(a => String(a.id) === String(s.areaId));
         const uname = (em) => { const u = lendState.users.find(x => x.email === em); return u ? (u.name || u.email) : em; };
 
+        const groupSel = `<select style="flex:1; min-width:0;" onchange="lendSel('group', this.value)"><option value="">全グループ</option>${groups.map(g => opt(g, g, s.group)).join('')}${opt(SHARED_GROUP_NAME, '🌐 全体利用（共同利用）', s.group)}</select>`;
+        const userSel = isShared
+            ? `<select style="flex:2; min-width:0;" disabled><option selected>🌐 全体利用（全員で共同利用）</option></select>`
+            : `<select style="flex:2; min-width:0;" onchange="lendSel('email', this.value)"><option value="">-- ユーザー選択 --</option>${s.group ? opt('__GROUP__', '🟢 ' + s.group + '（グループ全体）', s.email) : ''}${users.map(u => opt(u.email, (u.name || u.email) + (u.group ? '（' + u.group + '）' : ''), s.email)).join('')}</select>`;
         let html = '<div style="font-weight:bold; margin-bottom:4px;">借りる人</div>'
             + '<div style="display:flex; gap:6px; margin-bottom:10px;">'
-            + `<select style="flex:1; min-width:0;" onchange="lendSel('group', this.value)"><option value="">全グループ</option>${groups.map(g => opt(g, g, s.group)).join('')}</select>`
-            + `<select style="flex:2; min-width:0;" onchange="lendSel('email', this.value)"><option value="">-- ユーザー選択 --</option>${s.group ? opt('__GROUP__', '🟢 ' + s.group + '（グループ全体）', s.email) : ''}${users.map(u => opt(u.email, (u.name || u.email) + (u.group ? '（' + u.group + '）' : ''), s.email)).join('')}</select>`
+            + groupSel + userSel
             + '</div>'
             + '<div style="font-weight:bold; margin-bottom:4px;">区域</div>'
             + '<div style="display:flex; gap:6px; margin-bottom:8px;">'
@@ -2697,7 +2805,7 @@
             + '</div>';
         if (selArea) {
             // 貸出中=何回目かと現状、未貸出=最終返却日とこれまでの回数（「空き」とは表示しない）
-            const lentName = selArea.group ? selArea.group + '（グループ）' : (selArea.name || uname(selArea.user));
+            const lentName = selArea.group ? (selArea.group === SHARED_GROUP_NAME ? '🌐 全体利用' : selArea.group + '（グループ）') : (selArea.name || uname(selArea.user));
             const histInfo = (selArea.user || selArea.group)
                 ? `<span style="color:#C75F56;">貸出中（${selArea.lendCount || 1}回目）: ${escHtml(lentName)}（${escHtml(selArea.lendDate || '-')} → ${escHtml(selArea.dueDate || '-')}）</span>`
                 : `<span style="color:#555;">最終返却日: ${escHtml(selArea.lastReturn || 'なし')}　これまで ${selArea.lendCount || 0} 回</span>`;
@@ -2717,7 +2825,7 @@
         html += `<div style="background:#d4dae0; border:1px solid #b3bcc4; border-radius:6px; padding:8px; margin-top:8px;">`;
         html += `<div style="font-weight:bold; padding-bottom:6px; border-bottom:1px solid #aeb8c0; margin-bottom:4px;">貸出中の区域（${lent.length}）</div>`;
         html += lent.length ? lent.map(a =>
-            `<div class="lend-row"><div class="grow"><b>${escHtml(a.area)}</b>　<span style="font-size:13px; color:#333;">${escHtml(a.group ? a.group + '（グループ）' : (a.name || uname(a.user)))}</span><br>`
+            `<div class="lend-row"><div class="grow"><b>${escHtml(a.area)}</b>　<span style="font-size:13px; color:#333;">${escHtml(a.group ? (a.group === SHARED_GROUP_NAME ? '🌐 全体利用' : a.group + '（グループ）') : (a.name || uname(a.user)))}</span><br>`
             + `<span style="font-size:12px; color:#666;">${escHtml(a.lendDate || '-')} → <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
             + `<button class="clear-btn" onclick="doReturnArea(${a.id}, '${escHtml(a.area)}')">返却</button></div>`
         ).join('') : '<div style="color:#888; padding:6px;">ありません</div>';
@@ -2741,10 +2849,11 @@
         const a = lendState.areas.find(x => String(x.id) === String(s.areaId));
         if (!a) return;
         const isGroup = (s.email === '__GROUP__'); // 「グループ用」選択時はグループ全体へ貸出
+        const isShared = (s.group === SHARED_GROUP_NAME); // 全体利用（共同利用）への割り振り
         const u = isGroup ? null : lendState.users.find(x => x.email === s.email);
         if (!isGroup && !u) return;
         const due = (document.getElementById('lend-due') || {}).value || '';
-        const whoLabel = isGroup ? `グループ「${s.group}」全体` : `${u.name || u.email} さん`;
+        const whoLabel = isShared ? '全体利用（全員で共同利用）' : (isGroup ? `グループ「${s.group}」全体` : `${u.name || u.email} さん`);
         appConfirm(`「${a.area}」を\n${whoLabel}に貸し出します。\n返却期日: ${due || '未設定'}`, { okLabel: '貸出する' }).then(ok => {
             if (!ok) return;
             showBusy('貸出中…');
