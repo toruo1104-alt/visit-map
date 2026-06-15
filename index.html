@@ -216,7 +216,7 @@
         .print-grid .pn { font-size: 11px; line-height: 1; color: #333; }
         .print-grid .ps { font-size: 16px; font-weight: bold; line-height: 1.15; }
         @media print {
-            @page { size: A4 landscape; margin: 8mm; }
+            /* @page の向き(landscape/portrait)は枠の縦横比に応じて #print-page-style で動的設定 */
             body.printing > *:not(#print-view) { display: none !important; }
             #print-view { position: static !important; overflow: visible !important; padding: 0 !important; }
             .print-hide { display: none !important; }
@@ -2501,10 +2501,13 @@
         ring.forEach(p => ext(p[0], p[1]));
         pins.forEach(d => ext(+d.経度, +d.緯度));
         const cLng = (w + e) / 2, cLat = (s + n) / 2;
+        // 枠が縦長（高さ/幅 > 1.8）なら印刷を縦向きに。横長・正方形は横向き。
+        const spanXm = (e - w) * Math.cos(cLat * Math.PI / 180), spanYm = (n - s);
+        const portrait = (spanYm / Math.max(spanXm, 1e-9)) > 1.8;
 
-        // 詳細地図（左）。集合住宅カードの幅だけ左右に余白を確保し、その「中央領域」に枠をギリギリまで大きく収める。
-        // カードは必ず余白帯（枠の左右外側）に置く＝赤枠とカードは重ならない。
-        const DW = 1000, DH = 600, gap = 12, topPad = 8;   // 広域を廃止し詳細を全幅に
+        // 詳細地図（全幅）。集合住宅カードの幅だけ左右に余白を確保し、その「中央領域」に枠をギリギリまで大きく収める。
+        // カードは必ず余白帯（枠の左右外側）に置く＝赤枠とカードは重ならない。向きに合わせて紙サイズを切替。
+        const DW = portrait ? 720 : 1000, DH = portrait ? 980 : 600, gap = 12, topPad = 8;
         const cardW = d => Math.min(parseInt(d.最大部屋番号 || 1), 6) * 40 + 46;
         const cardH = d => Math.min(parseInt(d.階数 || 1), 8) * 36 + 40;
         const sideOf = d => (+d.経度 < cLng) ? 'L' : 'R';
@@ -2557,6 +2560,11 @@
             + `<div class="print-map-wrap" style="width:${DW}px; height:${DH}px;"><img class="basemap" src="${dUrl}" alt="">${ovD}${cardsHtml}</div>`
             + `<div class="print-credit">地図 © Mapbox © OpenStreetMap</div>`;
 
+        // 用紙の向きを枠の縦横比で切替（@page を動的に設定）
+        let pps = document.getElementById('print-page-style');
+        if (!pps) { pps = document.createElement('style'); pps.id = 'print-page-style'; document.head.appendChild(pps); }
+        pps.textContent = `@page { size: A4 ${portrait ? 'portrait' : 'landscape'}; margin: 8mm; }`;
+
         document.getElementById('print-view').style.display = 'block';
         document.body.classList.add('printing');
         document.addEventListener('keydown', printEscHandler, true);
@@ -2565,6 +2573,7 @@
     function closePrintView() {
         document.getElementById('print-view').style.display = 'none';
         document.body.classList.remove('printing');
+        const pps = document.getElementById('print-page-style'); if (pps) pps.textContent = ''; // 用紙向きの指定を解除（通常印刷に影響させない）
         document.removeEventListener('keydown', printEscHandler, true);
     }
     // 集合住宅1棟の部屋グリッド（白黒・印刷用）。記号は「拒=訪問拒否 / 外=外国語」だけ表示（他は部屋番号のみ）。
