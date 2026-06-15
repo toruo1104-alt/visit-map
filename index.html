@@ -2507,14 +2507,14 @@
 
         // 詳細地図（全幅）。集合住宅カードの幅だけ左右に余白を確保し、その「中央領域」に枠をギリギリまで大きく収める。
         // カードは必ず余白帯（枠の左右外側）に置く＝赤枠とカードは重ならない。向きに合わせて紙サイズを切替。
-        const DW = portrait ? 720 : 1000, DH = portrait ? 980 : 600, gap = 12, topPad = 8;
+        const DW = portrait ? 730 : 1050, DH = portrait ? 1000 : 670, gap = 12, topPad = 8; // 紙の余白内で少し拡大
         const cardW = d => Math.min(parseInt(d.最大部屋番号 || 1), 6) * 40 + 46;
         const cardH = d => Math.min(parseInt(d.階数 || 1), 8) * 36 + 40;
         const sideOf = d => (+d.経度 < cLng) ? 'L' : 'R';
         const maxCardW = side => { const a = shuga.filter(d => sideOf(d) === side).map(cardW); return a.length ? Math.max.apply(null, a) : 0; };
         const leftM = maxCardW('L') ? maxCardW('L') + gap : 8, rightM = maxCardW('R') ? maxCardW('R') + gap : 8;
         const cw = Math.max(DW - leftM - rightM, 140), chh = DH - 2 * topPad;
-        const dZoom = fitZoom_(w, s, e, n, cw, chh, 0.92);   // 中央領域の約92%まで枠を拡大
+        const dZoom = fitZoom_(w, s, e, n, cw, chh, 1.0);   // 中央領域いっぱい（100%）まで枠を拡大
         const wsD = 512 * Math.pow(2, dZoom);
         // 枠中心を 画像ピクセル(leftM + cw/2, DH/2) に合わせる → 地図中心を左右にずらす
         const mapLng = cLng - ((leftM + cw / 2) - DW / 2) * 360 / wsD;
