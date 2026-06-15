@@ -184,7 +184,7 @@
         #hist-edit-title { font-size: 16px; font-weight: bold; margin-bottom: 12px; text-align: center; }
         #hist-edit-dt { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
         /* 進捗モニタリングの達成度バー */
-        .prog-bar { height: 9px; border-radius: 5px; background: #e7ebee; overflow: hidden; margin-top: 3px; }
+        .prog-bar { height: 9px; border-radius: 5px; background: #d2d8dd; overflow: hidden; margin-top: 3px; }
         .prog-bar > span { display: block; height: 100%; border-radius: 5px; }
         #busy-indicator { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10007; background: rgba(44,62,80,0.92); color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 14px; display: none; align-items: center; gap: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
         #busy-indicator .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%; animation: busy-spin 0.7s linear infinite; }
@@ -2391,6 +2391,7 @@
     }
     function barColor_(r) { return r < 25 ? '#C75F56' : r < 50 ? '#D98E5A' : r < 70 ? '#E2C36A' : r < 85 ? '#9BC27E' : '#5E9DB8'; }
     function fmtPct_(done, total) { return total ? Math.round(done / total * 1000) / 10 : 0; }
+    function fmtNum_(n) { return (n == null || n === '') ? n : String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); } // 1234 → 1,234
     function progBar_(r) { return `<div class="prog-bar"><span style="width:${Math.min(100, r)}%; background:${barColor_(r)};"></span></div>`; }
     // currentData を 地区→丁目 に集計する
     function aggregateProgress(areaList) {
@@ -2494,10 +2495,12 @@
             + '</div>';
         html += `<div style="background:#f0f7f9; border:1px solid #cfe3ec; border-radius:8px; padding:10px; margin-bottom:10px;">`
             + `<div style="font-weight:bold; font-size:15px;">全体（${ML[mode]}）</div>`
-            + `<div style="font-size:14px; margin:4px 0;">${doneLabel} ${g.done} / ${g.total}　<b style="color:${barColor_(grate)};">${grate}%</b>　残 ${Math.max(0, g.total - g.done)}</div>`
+            + `<div style="font-size:14px; margin:4px 0;">${doneLabel} ${fmtNum_(g.done)} / ${fmtNum_(g.total)}　<b style="color:${barColor_(grate)};">${grate}%</b>　残 ${fmtNum_(Math.max(0, g.total - g.done))}</div>`
             + progBar_(grate) + '</div>';
+        const visD_ = Object.keys(tree).filter(d => { const t = progTotals_(tree[d].total, mode); return !(t.total === 0 && t.done === 0); });
+        const allOpen_ = visD_.length > 0 && visD_.every(d => progState.open[d]); // 表示中の全地区が開いているか（1ボタンで開閉を切替）
         html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:6px;">`
-            + `<div style="display:flex; gap:6px;"><button class="save-btn" style="background:#5E9DB8; padding:3px 8px;" onclick="expandAllProg()">すべて開く</button><button class="save-btn" style="background:#7f8c8d; padding:3px 8px;" onclick="collapseAllProg()">すべて閉じる</button></div>`
+            + `<button class="save-btn" style="background:${allOpen_ ? '#7f8c8d' : '#5E9DB8'}; padding:3px 8px;" onclick="${allOpen_ ? 'collapseAllProg()' : 'expandAllProg()'}">${allOpen_ ? 'すべて閉じる' : 'すべて開く'}</button>`
             + `<button class="save-btn" style="background:#7f8c8d; padding:3px 8px;" onclick="toggleProgSort()">並び：${progState.sort === 'rate' ? '進捗が低い順' : '件数が多い順'} ▼</button>`
             + `</div>`;
         const rows = Object.keys(tree).map(d => { const t = progTotals_(tree[d].total, mode); return { d: d, t: t, rate: fmtPct_(t.done, t.total), cnt: t.total }; })
@@ -2505,8 +2508,8 @@
         sortProg_(rows);
         rows.forEach(row => {
             const d = row.d, t = row.t, rate = row.rate, opened = !!progState.open[d];
-            html += `<div class="lend-row" style="cursor:pointer;" onclick="toggleProgDistrict('${escHtml(d)}')">`
-                + `<div class="grow"><b>${opened ? '▾' : '▸'} ${escHtml(d)}</b>　<span style="font-size:12px; color:#666;">${t.done}/${t.total}・残${rem_(t)}</span>${progBar_(rate)}</div>`
+            html += `<div class="lend-row" style="cursor:pointer; border-bottom:2px solid #8a949c;" onclick="toggleProgDistrict('${escHtml(d)}')">`
+                + `<div class="grow"><b>${opened ? '▾' : '▸'} ${escHtml(d)}</b>　<span style="font-size:12px; color:#333;">${fmtNum_(t.done)}/${fmtNum_(t.total)}・残${fmtNum_(rem_(t))}</span>${progBar_(rate)}</div>`
                 + `<div style="width:50px; text-align:right; font-weight:bold; color:${barColor_(rate)};">${pctTxt_(t)}</div></div>`;
             if (opened) {
                 const crows = Object.keys(tree[d].chomes).map(c => { const ct = progTotals_(tree[d].chomes[c], mode); return { c: c, ct: ct, rate: fmtPct_(ct.done, ct.total), cnt: ct.total, stat: tree[d].chomes[c] }; })
@@ -2514,7 +2517,7 @@
                 sortProg_(crows);
                 crows.forEach(cr => {
                     const s = cr.stat, extra = (mode !== 'pin' && (s.vacant || s.refuse)) ? `　空${s.vacant}/拒${s.refuse}` : ''; // ピン基準では空き家/拒否(訪問状態)は出さない
-                    html += `<div class="lend-row" style="padding-left:16px; background:#fafbfc;"><div class="grow"><span style="font-size:13px;">${escHtml(cr.c)}</span>　<span style="font-size:11px; color:#888;">${cr.ct.done}/${cr.ct.total}${extra}</span>${progBar_(cr.rate)}</div><div style="width:46px; text-align:right; font-size:13px; color:${barColor_(cr.rate)};">${pctTxt_(cr.ct)}</div></div>`;
+                    html += `<div class="lend-row" style="padding-left:16px; background:#e9eef2;"><div class="grow"><span style="font-size:13px;">${escHtml(cr.c)}</span>　<span style="font-size:11px; color:#555;">${fmtNum_(cr.ct.done)}/${fmtNum_(cr.ct.total)}${extra}</span>${progBar_(cr.rate)}</div><div style="width:46px; text-align:right; font-size:13px; color:${barColor_(cr.rate)};">${pctTxt_(cr.ct)}</div></div>`;
                 });
             }
         });
@@ -2888,13 +2891,14 @@
                     : `<span style="color:#555;">最終返却日: ${escHtml(a.lastReturn || 'なし')}　これまで ${a.lendCount || 0} 回</span>`;
                 const off = lent2 || !canLend;
                 return `<div class="lend-item">`
-                    + `<div style="margin-bottom:2px;"><b style="font-size:15px;">${escHtml(num)}</b><span style="color:#888; font-size:12px;">（件数: ${a.count === '' || a.count == null ? '-' : a.count}）</span></div>`
-                    + `<div style="font-size:12px; margin-bottom:5px;">${statusHtml}</div>`
                     + `<div style="display:flex; gap:6px; align-items:center;">`
-                    + `<button class="choice-btn" style="flex:0 0 auto; background:#eef3f6; padding:6px 10px;" onclick="previewLendArea(${a.id})">🗺</button>`
-                    + `<input type="date" id="lend-due-${a.id}" value="${lendDefaultDue()}" style="flex:1; min-width:0;">`
-                    + `<button class="choice-btn" style="flex:0 0 auto; ${off ? 'background:#b9c2c8; border-color:#b9c2c8; color:#f0f0f0; cursor:not-allowed;' : 'background:#5E9DB8; border-color:#5E9DB8; color:#fff;'}" onclick="doLendArea(${a.id})" ${off ? 'disabled' : ''}>貸出</button>`
-                    + `</div></div>`;
+                    + `<div style="flex:1; min-width:0;"><b style="font-size:15px;">${escHtml(num)}</b><span style="color:#777; font-size:12px;">（${a.count === '' || a.count == null ? '-' : a.count}件）</span></div>`
+                    + `<button class="choice-btn" style="flex:0 0 auto; background:#eef3f6; padding:6px 9px;" onclick="previewLendArea(${a.id})">🗺</button>`
+                    + `<input type="date" id="lend-due-${a.id}" value="${lendDefaultDue()}" style="flex:0 0 auto; width:128px; min-width:0;">`
+                    + `<button class="choice-btn" style="flex:0 0 auto; padding:6px 10px; ${off ? 'background:#b9c2c8; border-color:#b9c2c8; color:#f0f0f0; cursor:not-allowed;' : 'background:#5E9DB8; border-color:#5E9DB8; color:#fff;'}" onclick="doLendArea(${a.id})" ${off ? 'disabled' : ''}>貸出</button>`
+                    + `</div>`
+                    + `<div style="font-size:12px; margin-top:4px;">${statusHtml}</div>`
+                    + `</div>`;
             }).join('');
         } else if (s.district && (noChome || s.chome)) {
             html += '<div style="color:#888; padding:6px;">この範囲に番地がありません。</div>';
