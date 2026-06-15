@@ -248,6 +248,7 @@
         .copy-opt .co-val { font-size: 13px; color: #222; word-break: break-all; }
         .lend-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px dashed #e3e3e3; }
         .lend-row .grow { flex: 1; min-width: 0; }
+        .lend-item { border: 1px solid #cfe3ec; border-radius: 6px; padding: 8px; margin-bottom: 6px; background: #f7fbfc; }
         /* ユーザー管理は1行=1ユーザー。区切りをはっきりさせる（濃い実線） */
         .user-row { display: flex; flex-direction: column; gap: 6px; border: 1px solid #c4ccd3; border-radius: 8px; padding: 10px; margin-bottom: 8px; background: #eef4f8; }
         .user-row.ua-owner { background: #e6e9ec; }
@@ -2379,7 +2380,7 @@
     }
 
     // ── 管理: 進捗モニタリング（丁目単位。currentData から その場集計＝常に最新。シートには書かない） ──
-    let progState = { mode: 'all', sort: 'rate', open: {}, areas: [] }; // mode: all/kodate/room/pin、sort: rate(低い順)/count(多い順)。areas=件数(AreaList)
+    let progState = { mode: 'pin', sort: 'rate', open: {}, areas: [] }; // mode: all/kodate/room/pin（当面は'pin'を既定＝ピンが揃ったら'all'等へ戻す予定）、sort: rate(低い順)/count(多い順)。areas=件数(AreaList)
     // 訪問結果（不在/会えた/投函）か＝訪問済み。属性(拒否/外国語/空き家/他/未訪問)は未訪問扱い。
     function isVisitResult_(s) { s = String(s || ''); return s.indexOf('不在') >= 0 || s.indexOf('会えた') >= 0 || s.indexOf('投函') >= 0; }
     function progTotals_(s, mode) {
@@ -2460,6 +2461,8 @@
     function setProgMode(m) { progState.mode = m; renderProgress(); }
     function toggleProgSort() { progState.sort = (progState.sort === 'rate') ? 'count' : 'rate'; renderProgress(); }
     function toggleProgDistrict(d) { progState.open[d] = !progState.open[d]; renderProgress(); }
+    function expandAllProg() { const tree = progState.tree || aggregateProgress(progState.areas); Object.keys(tree).forEach(d => { progState.open[d] = true; }); renderProgress(); }
+    function collapseAllProg() { progState.open = {}; renderProgress(); }
     function showProgress() {
         openAppModal('📈 進捗モニタリング');
         const body = document.getElementById('app-modal-body');
@@ -2493,7 +2496,10 @@
             + `<div style="font-weight:bold; font-size:15px;">全体（${ML[mode]}）</div>`
             + `<div style="font-size:14px; margin:4px 0;">${doneLabel} ${g.done} / ${g.total}　<b style="color:${barColor_(grate)};">${grate}%</b>　残 ${Math.max(0, g.total - g.done)}</div>`
             + progBar_(grate) + '</div>';
-        html += `<div style="display:flex; justify-content:flex-end; margin-bottom:6px;"><button class="save-btn" style="background:#7f8c8d; padding:3px 8px;" onclick="toggleProgSort()">並び：${progState.sort === 'rate' ? '進捗が低い順' : '件数が多い順'} ▼</button></div>`;
+        html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:6px;">`
+            + `<div style="display:flex; gap:6px;"><button class="save-btn" style="background:#5E9DB8; padding:3px 8px;" onclick="expandAllProg()">すべて開く</button><button class="save-btn" style="background:#7f8c8d; padding:3px 8px;" onclick="collapseAllProg()">すべて閉じる</button></div>`
+            + `<button class="save-btn" style="background:#7f8c8d; padding:3px 8px;" onclick="toggleProgSort()">並び：${progState.sort === 'rate' ? '進捗が低い順' : '件数が多い順'} ▼</button>`
+            + `</div>`;
         const rows = Object.keys(tree).map(d => { const t = progTotals_(tree[d].total, mode); return { d: d, t: t, rate: fmtPct_(t.done, t.total), cnt: t.total }; })
             .filter(row => !(row.t.total === 0 && row.t.done === 0)); // 中身ゼロのバケット（件数のみ・ピン0が他モードに混入する回帰）を除外
         sortProg_(rows);
@@ -2550,7 +2556,12 @@
 
     function showPrintView() {
         if (!currentBoxFeature || !currentBoxFeature.geometry || !currentBoxFeature.geometry.coordinates) {
-            appAlert('先に番地（赤枠）を表示してから「印刷用表示」を開いてください。\n吹き出しの住所や番地ボタンをタップすると赤枠が出ます。');
+            // 区域(赤枠)が未選択のときは、住所選択を開いて印刷する番地を選ばせ、その赤枠を出してから印刷用表示を開く
+            openAreaNav(function (addr) {
+                const m = String(addr).match(/^(.+?)(\d+)丁目(\d+)番$/);
+                const query = m ? (ADDR_PREFIX + m[1] + m[2] + '-' + m[3]) : (ADDR_PREFIX + addr);
+                geocodeAndFly(query, 18, true, addr, function () { showPrintView(); });
+            });
             return;
         }
         const ring = currentBoxFeature.geometry.coordinates[0];
@@ -2663,17 +2674,32 @@
         return grid + '</tbody></table>';
     }
 
+    // 区域の返却（確認つき）。権限はサーバで判定（個人=本人 / グループ・全体利用=貸出係以上）。onDone で呼び出し元ビューを再読込。
+    function returnAreaConfirm(areaId, label, onDone) {
+        appConfirm(`「${label}」を返却します。\nよろしいですか？`, { okLabel: '返却する', danger: true }).then(ok => {
+            if (!ok) return;
+            showBusy('返却中…');
+            apiCall('returnArea', { areaId: areaId })
+                .then(() => { showToast('返却しました', false); if (typeof onDone === 'function') onDone(); })
+                .catch(handleServerError).finally(hideBusy);
+        });
+    }
     function showMyAreas() {
         openAppModal('📋 個人・グループの区域');
         showBusy('読み込み中…');
         apiCall('getMyAreas', {}).then(list => {
             const body = document.getElementById('app-modal-body');
             if (!list || !list.length) { body.innerHTML = '<div style="color:#888; padding:8px;">現在割り当てられている区域はありません。</div>'; return; }
-            const rowHtml = a =>
-                `<div class="lend-row" style="cursor:pointer;" onclick="closeAppModal(); showAssignedArea('${escHtml(a.area)}')">`
-                + `<div class="grow"><b style="font-size:16px;">${escHtml(a.area)}</b>${a.count !== '' && a.count != null ? `<span style="color:#888; font-size:12px;">（${a.count}件）</span>` : ''}<br>`
-                + `<span style="color:#666; font-size:12px;">貸出: ${escHtml(a.lendDate || '-')} ／ 返却期日: <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
-                + `<span style="color:#5E9DB8; font-weight:bold;">▶</span></div>`;
+            const rowHtml = a => {
+                const canReturn = (a.lentTo === 'self') || (ME.level >= 1); // 個人=本人 / グループ=貸出係以上
+                return `<div class="lend-row">`
+                    + `<div class="grow"><b style="font-size:16px;">${escHtml(a.area)}</b>${a.count !== '' && a.count != null ? `<span style="color:#888; font-size:12px;">（${a.count}件）</span>` : ''}<br>`
+                    + `<span style="color:#666; font-size:12px;">貸出: ${escHtml(a.lendDate || '-')} ／ 返却期日: <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
+                    + `<div style="display:flex; flex-direction:column; gap:4px; flex-shrink:0;">`
+                    + `<button class="choice-btn" style="background:#eef3f6; padding:5px 8px; font-size:12px;" onclick="closeAppModal(); showAssignedArea('${escHtml(a.area)}')">地図を表示</button>`
+                    + (canReturn ? `<button class="clear-btn" style="padding:5px 8px; font-size:12px;" onclick="returnAreaConfirm(${a.id}, '${escHtml(a.area)}', showMyAreas)">区域を返却</button>` : '')
+                    + `</div></div>`;
+            };
             const mine = list.filter(a => a.lentTo !== 'group'); // 自分個人への貸出
             const grp = list.filter(a => a.lentTo === 'group');  // 自分の所属グループへの貸出
             let html = `<div style="font-weight:bold; color:#356B82; padding-bottom:6px; border-bottom:1px solid #b9d6e2; margin-bottom:6px;">👤 個人の区域</div>`;
@@ -2722,12 +2748,16 @@
             const rows = byDist[d] || [];
             let html = `<button class="choice-btn" style="background:#eef3f6; margin-bottom:8px;" onclick="sharedState.district=null; renderSharedAreas();">← 地区一覧へ戻る</button>`;
             html += `<div style="font-weight:bold; color:#356B82; margin-bottom:6px;">${escHtml(d)}（貸出中 ${rows.length}）</div>`;
-            html += rows.map(a =>
-                `<div class="lend-row" style="cursor:pointer;" onclick="closeAppModal(); showAssignedArea('${escHtml(a.area)}')">`
-                + `<div class="grow"><b style="font-size:16px;">${escHtml(a.area)}</b>${a.count !== '' && a.count != null ? `<span style="color:#888; font-size:12px;">（${a.count}件）</span>` : ''}<br>`
-                + `<span style="color:#666; font-size:12px;">貸出: ${escHtml(a.lendDate || '-')} ／ 返却期日: <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
-                + `<span style="color:#5E9DB8; font-weight:bold;">▶</span></div>`
-            ).join('');
+            html += rows.map(a => {
+                const canReturn = (ME.level >= 1); // 全体利用は貸出係以上のみ返却可
+                return `<div class="lend-row">`
+                    + `<div class="grow"><b style="font-size:16px;">${escHtml(a.area)}</b>${a.count !== '' && a.count != null ? `<span style="color:#888; font-size:12px;">（${a.count}件）</span>` : ''}<br>`
+                    + `<span style="color:#666; font-size:12px;">貸出: ${escHtml(a.lendDate || '-')} ／ 返却期日: <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
+                    + `<div style="display:flex; flex-direction:column; gap:4px; flex-shrink:0;">`
+                    + `<button class="choice-btn" style="background:#eef3f6; padding:5px 8px; font-size:12px;" onclick="closeAppModal(); showAssignedArea('${escHtml(a.area)}')">地図を表示</button>`
+                    + (canReturn ? `<button class="clear-btn" style="padding:5px 8px; font-size:12px;" onclick="returnAreaConfirm(${a.id}, '${escHtml(a.area)}', showSharedAreas)">区域を返却</button>` : '')
+                    + `</div></div>`;
+            }).join('');
             body.innerHTML = html;
             return;
         }
@@ -2783,7 +2813,7 @@
     }
 
     // ── 管理: 区域の貸出・返却 ──
-    let lendState = { users: [], areas: [], sel: { group: '', email: '', district: '', chome: '', areaId: '' } };
+    let lendState = { users: [], areas: [], sel: { group: '', email: '', district: '', chome: '', range: '' } };
     function showLendScreen() {
         openAppModal('🗂 区域の貸出・返却');
         showBusy('読み込み中…');
@@ -2797,8 +2827,8 @@
         lendState.sel[k] = v;
         if (k === 'group') lendState.sel.email = ''; // グループを変えたら「借りる人」選択をリセット
         if (k === 'group' && v === SHARED_GROUP_NAME) lendState.sel.email = '__GROUP__'; // 全体利用は借りる人を自動で「全体利用」に固定
-        if (k === 'district') { lendState.sel.chome = ''; lendState.sel.areaId = ''; }
-        if (k === 'chome') lendState.sel.areaId = '';
+        if (k === 'district') { lendState.sel.chome = ''; lendState.sel.range = ''; }
+        if (k === 'chome') lendState.sel.range = '';
         renderLendScreen();
     }
     function lendDefaultDue() {
@@ -2815,14 +2845,23 @@
         if (s.email && s.email !== '__GROUP__' && !users.some(u => u.email === s.email)) s.email = '';
         const noChome = s.district && AREA_DATA[s.district] === null;
         const chomes = (s.district && !noChome) ? Object.keys(AREA_DATA[s.district]) : [];
-        let areaOpts = [];
-        if (noChome) areaOpts = lendState.areas.filter(a => a.area === s.district);
-        else if (s.district && s.chome) {
-            const p = s.district + s.chome + '丁目';
-            areaOpts = lendState.areas.filter(a => a.area.indexOf(p) === 0);
-        }
-        const selArea = lendState.areas.find(a => String(a.id) === String(s.areaId));
         const uname = (em) => { const u = lendState.users.find(x => x.email === em); return u ? (u.name || u.email) : em; };
+        const canLend = !!s.email; // 借りる人（個人 or グループ/全体利用）が選択済みか
+        // 選択中の地区・丁目に属する番地（丁目なし地区は地区そのもの1件）
+        let chomeAreas = [];
+        if (noChome) chomeAreas = lendState.areas.filter(a => a.area === s.district);
+        else if (s.district && s.chome) { const p = s.district + s.chome + '丁目'; chomeAreas = lendState.areas.filter(a => a.area.indexOf(p) === 0); }
+        const banchiNum = a => { const m = String(a.area).match(/(\d+)番$/); return m ? parseInt(m[1]) : 0; };
+        // 20件単位の範囲（丁目あり時のみ）。丁目を選んだら既定で先頭範囲。
+        let ranges = [];
+        let listAreas = chomeAreas;
+        if (!noChome && s.chome) {
+            const maxB = AREA_DATA[s.district][s.chome] || 0;
+            for (let st = 1; st <= maxB; st += 20) ranges.push(st);
+            if ((!s.range || isNaN(parseInt(s.range))) && ranges.length) s.range = ranges[0];
+            const rstart = parseInt(s.range) || 1;
+            listAreas = chomeAreas.filter(a => { const n = banchiNum(a); return n >= rstart && n <= rstart + 19; });
+        }
 
         const groupSel = `<select style="flex:1; min-width:0;" onchange="lendSel('group', this.value)"><option value="">全グループ</option>${groups.map(g => opt(g, g, s.group)).join('')}${opt(SHARED_GROUP_NAME, '👪 全体利用（共同利用）', s.group)}</select>`;
         const userSel = isShared
@@ -2832,29 +2871,35 @@
             + '<div style="display:flex; gap:6px; margin-bottom:10px;">'
             + groupSel + userSel
             + '</div>'
-            + '<div style="font-weight:bold; margin-bottom:4px;">区域</div>'
+            + '<div style="font-weight:bold; margin-bottom:4px;">区域（地区・丁目・範囲を選ぶ）</div>'
             + '<div style="display:flex; gap:6px; margin-bottom:8px;">'
             + `<select style="flex:1; min-width:0;" onchange="lendSel('district', this.value)"><option value="">地区</option>${Object.keys(AREA_DATA).map(d => opt(d, d, s.district)).join('')}</select>`
             + `<select style="flex:1; min-width:0;" onchange="lendSel('chome', this.value)" ${(!s.district || noChome) ? 'disabled' : ''}><option value="">丁目</option>${chomes.map(c => opt(c, c + '丁目', s.chome)).join('')}</select>`
-            + `<select style="flex:1.3; min-width:0;" onchange="lendSel('areaId', this.value)" ${!areaOpts.length ? 'disabled' : ''}><option value="">番地</option>${areaOpts.map(a => { const num = noChome ? a.area : a.area.replace(/^.*丁目/, ''); return opt(a.id, num + ((a.user || a.group) ? ' ●貸出中' : ''), s.areaId); }).join('')}</select>`
+            + `<select style="flex:1.4; min-width:0;" onchange="lendSel('range', this.value)" ${(noChome || !s.chome || !ranges.length) ? 'disabled' : ''}><option value="">範囲</option>${ranges.map(st => opt(st, st + '～' + Math.min(st + 19, AREA_DATA[s.district][s.chome]) + '番', s.range)).join('')}</select>`
             + '</div>';
-        if (selArea) {
-            // 貸出中=何回目かと現状、未貸出=最終返却日とこれまでの回数（「空き」とは表示しない）
-            const lentName = selArea.group ? (selArea.group === SHARED_GROUP_NAME ? '👪 全体利用' : selArea.group + '（グループ）') : (selArea.name || uname(selArea.user));
-            const histInfo = (selArea.user || selArea.group)
-                ? `<span style="color:#C75F56;">貸出中（${selArea.lendCount || 1}回目）: ${escHtml(lentName)}（${escHtml(selArea.lendDate || '-')} → ${escHtml(selArea.dueDate || '-')}）</span>`
-                : `<span style="color:#555;">最終返却日: ${escHtml(selArea.lastReturn || 'なし')}　これまで ${selArea.lendCount || 0} 回</span>`;
-            html += `<div style="background:#f0f7f9; border:1px solid #cfe3ec; border-radius:6px; padding:8px; margin-bottom:8px;">`
-                + `<b>${escHtml(selArea.area)}</b>（件数: ${selArea.count === '' || selArea.count == null ? '-' : selArea.count}）<br>`
-                + histInfo
-                + '</div>'
-                + `<div style="display:flex; gap:6px; align-items:center; margin-bottom:8px;"><label style="font-size:13px; font-weight:bold; flex-shrink:0;">返却期日</label><input type="date" id="lend-due" value="${lendDefaultDue()}" style="flex:1; min-width:0;"></div>`
-                + '<div style="display:flex; gap:8px; margin-bottom:12px;">'
-                + `<button class="choice-btn" style="flex:1; background:#eef3f6;" onclick="previewLendArea()">🗺 プレビュー</button>`;
-            // 貸出中の区域 or 借りる人が未選択のときはグレーアウト＋無効化（style属性は1つにまとめる。重複すると効かない）
-            const lendOff = !!(selArea.user || selArea.group || !s.email);
-            html += `<button class="choice-btn" style="flex:1; ${lendOff ? 'background:#b9c2c8; border-color:#b9c2c8; color:#f0f0f0; cursor:not-allowed;' : 'background:#5E9DB8; border-color:#5E9DB8; color:#fff;'}" onclick="doLendArea()" ${lendOff ? 'disabled' : ''}>貸出する</button>`
-                + '</div>';
+        // 範囲内の番地一覧（番地ごとに 件数・状態・プレビュー・返却期日・貸出ボタン）
+        if (listAreas.length) {
+            html += listAreas.slice().sort((a, b) => banchiNum(a) - banchiNum(b)).map(a => {
+                const num = noChome ? a.area : String(a.area).replace(/^.*丁目/, '');
+                const lent2 = !!(a.user || a.group);
+                const who = a.group ? (a.group === SHARED_GROUP_NAME ? '👪 全体利用' : a.group + '（グループ）') : (a.name || uname(a.user));
+                const statusHtml = lent2
+                    ? `<span style="color:#C75F56;">貸出中（${a.lendCount || 1}回目）: ${escHtml(who)}（${escHtml(a.lendDate || '-')} → <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span>）</span>`
+                    : `<span style="color:#555;">最終返却日: ${escHtml(a.lastReturn || 'なし')}　これまで ${a.lendCount || 0} 回</span>`;
+                const off = lent2 || !canLend;
+                return `<div class="lend-item">`
+                    + `<div style="margin-bottom:2px;"><b style="font-size:15px;">${escHtml(num)}</b><span style="color:#888; font-size:12px;">（件数: ${a.count === '' || a.count == null ? '-' : a.count}）</span></div>`
+                    + `<div style="font-size:12px; margin-bottom:5px;">${statusHtml}</div>`
+                    + `<div style="display:flex; gap:6px; align-items:center;">`
+                    + `<button class="choice-btn" style="flex:0 0 auto; background:#eef3f6; padding:6px 10px;" onclick="previewLendArea(${a.id})">🗺</button>`
+                    + `<input type="date" id="lend-due-${a.id}" value="${lendDefaultDue()}" style="flex:1; min-width:0;">`
+                    + `<button class="choice-btn" style="flex:0 0 auto; ${off ? 'background:#b9c2c8; border-color:#b9c2c8; color:#f0f0f0; cursor:not-allowed;' : 'background:#5E9DB8; border-color:#5E9DB8; color:#fff;'}" onclick="doLendArea(${a.id})" ${off ? 'disabled' : ''}>貸出</button>`
+                    + `</div></div>`;
+            }).join('');
+        } else if (s.district && (noChome || s.chome)) {
+            html += '<div style="color:#888; padding:6px;">この範囲に番地がありません。</div>';
+        } else {
+            html += '<div style="color:#888; padding:8px;">地区・丁目・範囲を選ぶと、番地ごとの貸出欄が表示されます。</div>';
         }
         const lent = lendState.areas.filter(a => a.user || a.group);
         html += `<div style="background:#d4dae0; border:1px solid #b3bcc4; border-radius:6px; padding:8px; margin-top:8px;">`;
@@ -2868,8 +2913,8 @@
         body.innerHTML = html;
     }
     // プレビュー: モーダルを一旦隠して地図で区域を確認 →「戻る」で選択状態のまま貸出画面へ
-    function previewLendArea() {
-        const a = lendState.areas.find(x => String(x.id) === String(lendState.sel.areaId));
+    function previewLendArea(areaId) {
+        const a = lendState.areas.find(x => String(x.id) === String(areaId));
         if (!a) return;
         document.getElementById('app-modal').style.display = 'none';
         document.getElementById('lend-preview-back').style.display = '';
@@ -2879,15 +2924,16 @@
         document.getElementById('lend-preview-back').style.display = 'none';
         document.getElementById('app-modal').style.display = 'flex'; // 選択状態は lendState に保持されている
     }
-    function doLendArea() {
+    function doLendArea(areaId) {
         const s = lendState.sel;
-        const a = lendState.areas.find(x => String(x.id) === String(s.areaId));
+        const a = lendState.areas.find(x => String(x.id) === String(areaId));
         if (!a) return;
         const isGroup = (s.email === '__GROUP__'); // 「グループ用」選択時はグループ全体へ貸出
         const isShared = (s.group === SHARED_GROUP_NAME); // 全体利用（共同利用）への割り振り
         const u = isGroup ? null : lendState.users.find(x => x.email === s.email);
-        if (!isGroup && !u) return;
-        const due = (document.getElementById('lend-due') || {}).value || '';
+        if (!isGroup && !u) { showToast('借りる人を選んでください', true); return; }
+        const dueEl = document.getElementById('lend-due-' + areaId);
+        const due = dueEl ? dueEl.value : '';
         const whoLabel = isShared ? '全体利用（全員で共同利用）' : (isGroup ? `グループ「${s.group}」全体` : `${u.name || u.email} さん`);
         appConfirm(`「${a.area}」を\n${whoLabel}に貸し出します。\n返却期日: ${due || '未設定'}`, { okLabel: '貸出する' }).then(ok => {
             if (!ok) return;
@@ -2898,8 +2944,7 @@
             apiCall('lendArea', params)
                 .then(d => {
                     lendState.users = d.users; lendState.areas = d.areas;
-                    lendState.sel = { group: '', email: '', district: '', chome: '', areaId: '' }; // 次の貸出に備えて入力をクリア
-                    renderLendScreen();
+                    renderLendScreen(); // 借りる人・区域・範囲の選択は保持＝続けて同じ範囲の別番地を貸し出せる
                     showToast('貸し出しました', false);
                 })
                 .catch(handleServerError).finally(hideBusy);
