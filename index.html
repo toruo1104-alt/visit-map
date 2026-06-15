@@ -249,7 +249,18 @@
         .lend-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px dashed #e3e3e3; }
         .lend-row .grow { flex: 1; min-width: 0; }
         /* ユーザー管理は1行=1ユーザー。区切りをはっきりさせる（濃い実線） */
-        .user-row { border-bottom: 2px solid #9aa3ab; padding-top: 10px; padding-bottom: 10px; }
+        .user-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; border: 1px solid #ccd2d8; border-radius: 8px; padding: 10px; margin-bottom: 8px; background: #fff; }
+        .user-row.ua-owner { background: #eceef0; }
+        .user-row.ua-inactive { opacity: 0.6; background: #f1f2f4; }
+        .user-row .ua-email { flex: 1 1 100%; min-width: 0; }
+        .user-row .ua-name { flex: 1 1 84px; min-width: 76px; }
+        .user-row .ua-group { flex: 1 1 110px; min-width: 92px; }
+        .user-row .ua-status { flex: 0 0 auto; }
+        .user-row .ua-role { flex: 1 1 130px; min-width: 116px; }
+        .user-row .ua-del { flex: 0 0 auto; }
+        .ua-filter { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+        .ua-filter #ua-filter-q { flex: 2; min-width: 130px; }
+        #ua-filter-count { font-size: 12px; color: #666; white-space: nowrap; }
         .due-over { color: #C75F56; font-weight: bold; } /* 返却期日超過 */
         .due-soon { color: #B0763C; font-weight: bold; } /* 期日まで2週間以内（落ち着いたアンバー） */
         #lend-preview-back { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); z-index: 9999; background: #34495e; color: #fff; border: none; border-radius: 20px; padding: 11px 20px; font-size: 15px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.35); cursor: pointer; }
@@ -1873,9 +1884,9 @@
                 </div>
                 <label style="font-size:11px; font-weight:bold;">緑=部屋あり（初期は全選択）。無い部屋をタップで外す</label>
                 <div id="setup-grid-container" style="max-height:120px; overflow:auto; margin-bottom:8px;"></div>
-                <div class="inline-group detail-only"><label>オートロック</label><select id="new-lock"><option value="不明" selected>不明</option><option value="なし">なし</option><option value="あり">あり</option></select></div>
+                <div class="inline-group"><label>オートロック</label><select id="new-lock"><option value="不明" selected>不明</option><option value="なし">なし</option><option value="あり">あり</option></select></div>
+                <div class="inline-group"><label>構成属性</label><select id="new-attribute"><option value="不明">不明</option><option value="ファミリー">ファミリー</option><option value="シングル">シングル</option><option value="混在">混在</option></select></div>
                 <div class="inline-group detail-only"><label>管理人</label><select id="new-manager"><option value="不明" selected>不明</option><option value="なし">なし</option><option value="あり">あり</option></select></div>
-                <div class="inline-group detail-only"><label>構成属性</label><select id="new-attribute"><option value="不明">不明</option><option value="ファミリー">ファミリー</option><option value="シングル">シングル</option><option value="混在">混在</option></select></div>
                 <div class="form-group memo-empty"><label>メモ</label><input type="text" id="new-memo"></div>
                 <button class="submit-btn" id="reg-btn" onclick="submitNewLocation(${latVal}, ${lngVal}, '集合住宅')">登録</button>
                 <button class="detail-toggle" onclick="togglePopupDetail(this)">▼ 詳細を表示</button>
@@ -2904,13 +2915,19 @@
 
     // ── 管理: ユーザー管理（保存すると UserList とスプレッドシートの共有を更新） ──
     let userAdminState = [];
-    let userAdminFilter = { q: '', role: '', status: '' }; // ユーザー管理のフィルタ（メール/名前/グループ・権限・状態）
+    let userAdminFilter = { q: '', role: '', status: '', group: '' }; // ユーザー管理のフィルタ（メール/名前/グループ・権限・状態）
+    // 権限ごとの色（背景＋文字）。一般=グレー / 貸出係=緑 / 管理者=青 / システム管理者=アンバー
+    const ROLE_STYLE = { user: 'background:#EEF1F3; color:#4B5560;', lender: 'background:#E1F5EE; color:#0F6E56;', manager: 'background:#E6F1FB; color:#185FA5;', sysadmin: 'background:#FAEEDA; color:#854F0B;' };
+    const roleStyleStr = role => ROLE_STYLE[role] || '';
+    // グループ名から決定的に色を割り当て（同じ名前は常に同じ色）。空は色なし。
+    const GROUP_PALETTE = ['background:#E6F1FB; color:#0C447C;', 'background:#E1F5EE; color:#085041;', 'background:#FAECE7; color:#712B13;', 'background:#FBEAF0; color:#72243E;', 'background:#EAF3DE; color:#27500A;', 'background:#FAEEDA; color:#633806;', 'background:#EEEDFE; color:#3C3489;', 'background:#F1EFE8; color:#444441;'];
+    const groupStyleStr = name => { name = String(name || '').trim(); if (!name) return ''; let h = 0; for (let k = 0; k < name.length; k++) h = (h * 31 + name.charCodeAt(k)) >>> 0; return GROUP_PALETTE[h % GROUP_PALETTE.length]; };
     function showUserAdmin() {
         openAppModal('👥 ユーザー管理');
         showBusy('読み込み中…');
         apiCall('getUsers', {}).then(list => {
             userAdminState = (list || []).map(u => ({ email: u.email, name: u.name, role: u.role, group: u.group, active: u.active !== false }));
-            userAdminFilter = { q: '', role: '', status: '' }; // 開くたびにフィルタは初期化（前回条件を持ち越さない）
+            userAdminFilter = { q: '', role: '', status: '', group: '' }; // 開くたびにフィルタは初期化（前回条件を持ち越さない）
             renderUserAdmin();
         }).catch(handleServerError).finally(hideBusy);
     }
@@ -2918,34 +2935,38 @@
         const body = document.getElementById('app-modal-body');
         let html = '<div style="font-size:12px; color:#666; margin-bottom:8px;">保存すると、この一覧の内容で<b>スプレッドシートの共有も更新</b>されます（追加=招待・削除=解除）。<br><b>無効</b>＝行は残したまま<b>アプリのログインだけ拒否</b>（共有はそのまま。いつでも有効に戻せます）。</div>';
         const _uf = userAdminFilter;
-        html += '<div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; align-items:center;">'
-            + `<input id="ua-filter-q" placeholder="🔍 メール／名前／グループ" value="${escHtml(_uf.q)}" style="flex:2; min-width:120px; font-size:13px; padding:6px;" oninput="userAdminFilter.q = this.value; applyUserFilter();">`
-            + `<select id="ua-filter-role" style="font-size:13px; padding:6px;" onchange="userAdminFilter.role = this.value; applyUserFilter();"><option value="">全権限</option><option value="user" ${_uf.role === 'user' ? 'selected' : ''}>一般</option><option value="lender" ${_uf.role === 'lender' ? 'selected' : ''}>貸出係</option><option value="manager" ${_uf.role === 'manager' ? 'selected' : ''}>管理者</option><option value="sysadmin" ${_uf.role === 'sysadmin' ? 'selected' : ''}>システム管理者</option></select>`
-            + `<select id="ua-filter-status" style="font-size:13px; padding:6px;" onchange="userAdminFilter.status = this.value; applyUserFilter();"><option value="">全状態</option><option value="active" ${_uf.status === 'active' ? 'selected' : ''}>有効</option><option value="inactive" ${_uf.status === 'inactive' ? 'selected' : ''}>無効</option></select>`
-            + '<span id="ua-filter-count" style="font-size:12px; color:#666; white-space:nowrap;"></span>'
+        const groups = Array.from(new Set(userAdminState.map(u => String(u.group || '').trim()).filter(Boolean))).sort();
+        const gOpt = cur => groups.map(g => `<option value="${escHtml(g)}" ${String(cur) === g ? 'selected' : ''}>${escHtml(g)}</option>`).join('');
+        // フィルタ：メール/名前は検索（記入）、グループ・権限・状態は選択
+        html += '<div class="ua-filter">'
+            + `<input id="ua-filter-q" placeholder="🔍 メール／名前 で検索" value="${escHtml(_uf.q)}" oninput="userAdminFilter.q = this.value; applyUserFilter();">`
+            + `<select id="ua-filter-group" style="${groupStyleStr(_uf.group)}" onchange="userAdminFilter.group = this.value; applyUserFilter();"><option value="">全グループ</option>${gOpt(_uf.group)}</select>`
+            + `<select id="ua-filter-role" style="${roleStyleStr(_uf.role)}" onchange="userAdminFilter.role = this.value; applyUserFilter();"><option value="">全権限</option><option value="user" ${_uf.role === 'user' ? 'selected' : ''}>一般</option><option value="lender" ${_uf.role === 'lender' ? 'selected' : ''}>貸出係</option><option value="manager" ${_uf.role === 'manager' ? 'selected' : ''}>管理者</option><option value="sysadmin" ${_uf.role === 'sysadmin' ? 'selected' : ''}>システム管理者</option></select>`
+            + `<select id="ua-filter-status" onchange="userAdminFilter.status = this.value; applyUserFilter();"><option value="">全状態</option><option value="active" ${_uf.status === 'active' ? 'selected' : ''}>有効</option><option value="inactive" ${_uf.status === 'inactive' ? 'selected' : ''}>無効</option></select>`
+            + '<span id="ua-filter-count"></span>'
             + '</div>';
-        html += userAdminState.map((u, i) => {
-            // オーナーはメール変更・降格・削除・無効化を不可にする（漢字名・グループは編集可。サーバー側でも検証している）
-            const isOwner = !!(ME.owner && String(u.email).trim().toLowerCase() === ME.owner);
+        html += `<datalist id="ua-group-list">${groups.map(g => `<option value="${escHtml(g)}">`).join('')}</datalist>`;
+        // 行データ。オーナーは末尾へ並べ替え（i は userAdminState の元インデックスを保持＝各操作はそのまま有効）
+        const isOwnerRow = u => !!(ME.owner && String(u.email).trim().toLowerCase() === ME.owner);
+        const rows = userAdminState.map((u, i) => ({ u, i }));
+        const ordered = rows.filter(r => !isOwnerRow(r.u)).concat(rows.filter(r => isOwnerRow(r.u)));
+        html += ordered.map(({ u, i }) => {
+            const isOwner = isOwnerRow(u);
             if (isOwner) { u.role = 'sysadmin'; u.active = true; } // 表示と送信値を一致させる（シート手編集で崩れていても矯正）
             const inactive = (u.active === false);
-            const emailAttrs = isOwner
-                ? 'readonly style="flex:2; min-width:170px; font-size:13px; padding:6px; background:#f0f0f0; color:#777;"'
-                : 'style="flex:2; min-width:170px; font-size:13px; padding:6px;" onchange="userAdminState[' + i + '].email = this.value"';
-            // 有効/無効（オーナーは常に有効・切替不可）。無効選択時は赤字＋行を淡色化
-            const statusControl = isOwner
-                ? ''
-                : `<select data-uf="status" style="font-size:13px; padding:6px; ${inactive ? 'color:#C75F56; font-weight:bold;' : ''}" onchange="userAdminState[${i}].active = (this.value === '1'); renderUserAdmin();"><option value="1" ${!inactive ? 'selected' : ''}>有効</option><option value="0" ${inactive ? 'selected' : ''}>無効</option></select>`;
-            const roleControl = isOwner
-                ? '<span style="font-size:12px; color:#B0763C; font-weight:bold; padding:6px 2px; white-space:nowrap;">👑 オーナー（システム管理者）</span>'
-                : `<select data-uf="role" style="font-size:13px; padding:6px;" onchange="userAdminState[${i}].role = this.value; renderUserAdmin();"><option value="user" ${u.role === 'user' ? 'selected' : ''}>一般</option><option value="lender" ${u.role === 'lender' ? 'selected' : ''}>貸出係</option><option value="manager" ${u.role === 'manager' ? 'selected' : ''}>管理者</option><option value="sysadmin" ${u.role === 'sysadmin' ? 'selected' : ''}>システム管理者</option></select>`
-                  + `<button class="clear-btn" onclick="userAdminState.splice(${i}, 1); renderUserAdmin();">削除</button>`;
-            return `<div class="lend-row user-row"${isOwner ? ' data-owner-role="sysadmin"' : ''} style="flex-wrap:wrap; ${inactive ? 'opacity:0.6; background:#f1f2f4;' : ''}">`
-                + `<input data-uf="email" ${emailAttrs} placeholder="メールアドレス" value="${escHtml(u.email)}">`
-                + `<input data-uf="name" style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="漢字名" value="${escHtml(u.name)}" onchange="userAdminState[${i}].name = this.value">`
-                + `<input data-uf="group" style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="グループ" value="${escHtml(u.group)}" onchange="userAdminState[${i}].group = this.value">`
-                + statusControl
-                + roleControl
+            // オーナーは権限・状態を変更不可（グレーアウトした無効セレクトで“他と同じ表示”にする）。メールは読取専用、削除不可。漢字名・グループは編集可。
+            const emailIn = isOwner
+                ? `<input data-uf="email" class="ua-email" readonly style="background:#ececec; color:#8a8a8a;" value="${escHtml(u.email)}">`
+                : `<input data-uf="email" class="ua-email" placeholder="メールアドレス" value="${escHtml(u.email)}" onchange="userAdminState[${i}].email = this.value">`;
+            const statusSel = `<select data-uf="status" class="ua-status" ${isOwner ? 'disabled' : ''} style="${inactive ? 'color:#C75F56; font-weight:bold;' : ''}" onchange="userAdminState[${i}].active = (this.value === '1'); renderUserAdmin();"><option value="1" ${!inactive ? 'selected' : ''}>有効</option><option value="0" ${inactive ? 'selected' : ''}>無効</option></select>`;
+            const roleSel = `<select data-uf="role" class="ua-role" style="${isOwner ? '' : roleStyleStr(u.role)}" ${isOwner ? 'disabled' : ''} onchange="userAdminState[${i}].role = this.value; renderUserAdmin();"><option value="user" ${u.role === 'user' ? 'selected' : ''}>一般</option><option value="lender" ${u.role === 'lender' ? 'selected' : ''}>貸出係</option><option value="manager" ${u.role === 'manager' ? 'selected' : ''}>管理者</option><option value="sysadmin" ${u.role === 'sysadmin' ? 'selected' : ''}>システム管理者</option></select>`;
+            return `<div class="user-row${isOwner ? ' ua-owner' : ''}${inactive ? ' ua-inactive' : ''}">`
+                + emailIn
+                + `<input data-uf="name" class="ua-name" placeholder="漢字名" value="${escHtml(u.name)}" onchange="userAdminState[${i}].name = this.value">`
+                + `<input data-uf="group" class="ua-group" list="ua-group-list" style="${groupStyleStr(u.group)}" placeholder="グループ" value="${escHtml(u.group)}" onchange="userAdminState[${i}].group = this.value; renderUserAdmin();">`
+                + statusSel
+                + roleSel
+                + (isOwner ? '' : `<button class="clear-btn ua-del" onclick="userAdminState.splice(${i}, 1); renderUserAdmin();">削除</button>`)
                 + `</div>`;
         }).join('');
         html += '<div style="display:flex; gap:8px; margin-top:10px;">'
@@ -2970,7 +2991,8 @@
             const stEl = row.querySelector('select[data-uf="status"]');
             const active = stEl ? (stEl.value === '1') : true; // オーナー行はセレクトが無く常に有効
             let ok = true;
-            if (q && !(email.indexOf(q) >= 0 || name.indexOf(q) >= 0 || group.indexOf(q) >= 0)) ok = false;
+            if (q && !(email.indexOf(q) >= 0 || name.indexOf(q) >= 0)) ok = false; // 検索はメール/名前のみ
+            if (f.group && group !== String(f.group).trim().toLowerCase()) ok = false; // グループは選択で一致
             if (f.role && role !== f.role) ok = false;
             if (f.status === 'active' && !active) ok = false;
             if (f.status === 'inactive' && active) ok = false;
@@ -3052,8 +3074,8 @@
                 markerEl.style.background = shugaColor(firstItem.属性);
                 // 薄黄(ファミリー/混在)背景では白シルエットが見えないため、濃い黄土色に切り替える
                 markerEl.style.color = (firstItem.属性 === 'ファミリー' || firstItem.属性 === '混在') ? '#8a7117' : '#fff';
-                // 枠＝オートロック（あり=くすみブリック / なし=くすみブルー）
-                markerEl.style.border = '3px solid ' + (getAutolock(firstItem) === 'あり' ? '#A8554E' : '#3E8E54');
+                // 枠＝オートロックありのみ赤枠。なし・不明は枠なし
+                markerEl.style.border = (getAutolock(firstItem) === 'あり') ? '3px solid #A8554E' : 'none';
                 popupHtml += createShugaViewHtml(items);
             } else {
                 styleKodateMarker(markerEl, firstItem);
@@ -3129,9 +3151,9 @@
                 <label style="font-size:11px; font-weight:bold;">メモ</label>
                 <textarea id="memo-${item.rowNumber}" rows="2" style="width:100%; font-size:12px;" readonly onpointerdown="this.removeAttribute('readonly')">${escHtml(item.特記事項 || '')}</textarea>
                 <div class="btn-row detail-only">
-                    <button class="save-btn" onclick="saveMemo(${item.rowNumber})">メモ保存</button>
+                    <button class="save-btn" style="background:#9E3B4A; border-color:#9E3B4A; color:#fff;" onclick="saveMemo(${item.rowNumber})">メモ保存</button>
                     <button class="clear-btn" onclick="clearMemo(${item.rowNumber})">メモ削除</button>
-                    <button class="clear-btn" style="background:#7f8c8d;" onclick="confirmClearHistory(${item.rowNumber}, false)">履歴欄のクリア</button>
+                    <button class="clear-btn" style="background:#7f8c8d;" onclick="confirmClearHistory(${item.rowNumber}, false)">履歴クリア</button>
                 </div>
             </div>
             <button class="clear-btn detail-only" style="width:100%; margin-top:8px;" onclick="confirmDelete(${item.rowNumber})">🗑 このピンを削除</button>
@@ -3190,9 +3212,9 @@
                 <label style="font-size:11px; font-weight:bold;">メモ</label>
                 <textarea id="memo-${first.rowNumber}" rows="1" style="width:100%; font-size:11px;" readonly onpointerdown="this.removeAttribute('readonly')">${escHtml(memoText)}</textarea>
                 <div class="btn-row detail-only">
-                    <button class="save-btn" onclick="saveMemo(${first.rowNumber})">メモ保存</button>
+                    <button class="save-btn" style="background:#9E3B4A; border-color:#9E3B4A; color:#fff;" onclick="saveMemo(${first.rowNumber})">メモ保存</button>
                     <button class="clear-btn" onclick="clearMemo(${first.rowNumber})">メモ削除</button>
-                    <button class="clear-btn" style="background:#7f8c8d;" onclick="confirmClearHistory(${first.rowNumber}, true)">履歴欄のクリア</button>
+                    <button class="clear-btn" style="background:#7f8c8d;" onclick="confirmClearHistory(${first.rowNumber}, true)">履歴クリア</button>
                 </div>
             </div>
             <button class="save-btn detail-only" style="background:#34495e; width:100%; margin-top:8px;" onclick="confirmShugaEdit(${first.rowNumber}, this)">✏️ 建物情報を編集</button>
@@ -3203,9 +3225,7 @@
 
     // 編集前確認ダイアログ
     function confirmShugaEdit(rowNumber, btn) {
-        appConfirm('建物情報を編集しますか？', { okLabel: '編集する' }).then(ok => {
-            if (ok) showShugaEditForm(rowNumber, btn);
-        });
+        showShugaEditForm(rowNumber, btn); // 確認ダイアログは廃止（押したら直接編集フォームへ）
     }
 
     // 集合住宅の建物情報を編集するフォームを表示（詳細表示を差し替え）
