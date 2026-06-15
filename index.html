@@ -1257,13 +1257,13 @@
         if (!item) return;
         const lng = parseFloat(item.経度), lat = parseFloat(item.緯度);
         if (isNaN(lng) || isNaN(lat)) return;
-        const addr = (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? item.住所 : (deriveAddress(lng, lat) || '');
-        arriveAt([lng, lat], 18, true, addr);   // 住所選択時と同じ：flyToで遷移＋赤枠＋上部ラベル
+        const addr = (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? addrWithoutGo(item.住所) : (deriveAddress(lng, lat) || '');
+        arriveAt([lng, lat], 18, true, addr);   // 赤枠＋上部ラベルは「番」まで（号は落とす）。住所選択時と同じ flyTo
     }
     // 新規登録フォームの住所タップ → 同様に新規地点の番地を赤枠表示＋遷移する。
     function outlineNewAddr() {
         if (isNaN(newPinLng) || isNaN(newPinLat)) return;
-        const addr = newPinAddress || (deriveAddress(newPinLng, newPinLat) || '');
+        const addr = newPinAddress ? addrWithoutGo(newPinAddress) : (deriveAddress(newPinLng, newPinLat) || ''); // 赤枠ラベルは「番」まで（号は落とす）
         arriveAt([newPinLng, newPinLat], 18, true, addr);
     }
     // 吹き出し内の未指定住所(.derived-addr[data-stored=0])を、街区内包方式で算出して表示に反映
