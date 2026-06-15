@@ -1140,10 +1140,11 @@
     //   touch / mouse イベントで実装。スクロール（移動）でキャンセル、touchendはpreventDefaultで合成clickを抑止。
     function attachLongPress(el, onTap, onLong) {
         let timer = null, longFired = false, sx = 0, sy = 0, moved = false;
+        try { el.style.userSelect = 'none'; el.style.webkitUserSelect = 'none'; el.style.webkitTouchCallout = 'none'; } catch (e) {} // 長押し対象の文字選択・コールアウトを抑止
         const begin = (x, y) => {
             longFired = false; moved = false; sx = x; sy = y;
             clearTimeout(timer);
-            timer = setTimeout(() => { longFired = true; onLong(); }, 500);
+            timer = setTimeout(() => { longFired = true; try { const sel = window.getSelection(); if (sel) sel.removeAllRanges(); } catch (e) {} onLong(); }, 500);
         };
         const movecheck = (x, y) => {
             if (Math.abs(x - sx) > 10 || Math.abs(y - sy) > 10) { moved = true; clearTimeout(timer); }
@@ -3613,17 +3614,17 @@
         return (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? String(item.住所).trim()
             : (deriveAddress(parseFloat(item.経度), parseFloat(item.緯度)) || '');
     }
-    function latestHistRecord_(item, roomNum) {
-        if (!item || !item.履歴データ) return '';
-        let arr; try { arr = JSON.parse(item.履歴データ); } catch (e) { return ''; }
-        if (!Array.isArray(arr) || !arr.length) return '';
+    // 履歴を新しい順の配列で返す（戸建て=全件 / 集合住宅=その部屋の '○号室' 一致のみ。各要素は「日時 結果」）
+    function histRecords_(item, roomNum) {
+        if (!item || !item.履歴データ) return [];
+        let arr; try { arr = JSON.parse(item.履歴データ); } catch (e) { return []; }
+        if (!Array.isArray(arr)) return [];
         if (roomNum != null && !isNaN(roomNum)) {
             const prefix = roomNum + '号室';
-            const rec = arr.find(h => String(h.status).indexOf(prefix) === 0); // 新しい順なので最初の一致が最新
-            if (!rec) return '';
-            return ((rec.time || '') + ' ' + String(rec.status).slice(prefix.length).replace(/^[:：\s]+/, '')).trim();
+            return arr.filter(h => String(h.status).indexOf(prefix) === 0)
+                      .map(h => ((h.time || '') + ' ' + String(h.status).slice(prefix.length).replace(/^[:：\s]+/, '')).trim());
         }
-        return ((arr[0].time || '') + ' ' + (arr[0].status || '')).trim();
+        return arr.map(h => ((h.time || '') + ' ' + (h.status || '')).trim());
     }
     let infoCopyCtx = null; // 現在開いているコピー対象の {addr,hist,app,map}
     function openInfoCopyMenu(rowNumber, roomNum) {
@@ -3634,7 +3635,7 @@
         if (roomNum != null) addr = (addr ? addr + ' ' : '') + roomNum + '号室';
         infoCopyCtx = {
             addr: addr,
-            hist: latestHistRecord_(item, roomNum),
+            histList: histRecords_(item, roomNum),
             app: location.origin + location.pathname + '?pin=' + rowNumber,
             map: (!isNaN(lat) && !isNaN(lng)) ? ('https://www.google.com/maps/search/?api=1&query=' + lat + ',' + lng) : ''
         };
@@ -3642,10 +3643,17 @@
         const rowOpt = (key, label, val) => val ? `<label class="copy-opt"><input type="checkbox" data-ck="${key}" checked><span><span class="co-label">${escHtml(label)}</span><br><span class="co-val">${escHtml(val)}</span></span></label>` : '';
         let html = `<div style="font-size:12px; color:#666; margin-bottom:8px;">コピーする項目を選んで「コピー」を押してください。</div>`;
         html += rowOpt('addr', roomNum != null ? '住所・部屋番号' : '住所', f.addr);
-        html += rowOpt('hist', '履歴の最新記録', f.hist);
-        html += rowOpt('app', 'アプリでこのピンを開くリンク', f.app);
+        if (f.histList.length) {
+            html += `<div class="copy-opt" style="cursor:default;"><input type="checkbox" data-ck="hist" checked>`
+                + `<span style="flex:1;"><span class="co-label">履歴</span>`
+                + `<span style="font-size:12px; margin-left:10px; white-space:nowrap;">`
+                + `<label style="cursor:pointer;"><input type="radio" name="hist-mode" value="latest" checked onchange="updateHistPreview('latest')" style="width:14px; height:14px; margin:0 3px 0 0; vertical-align:middle;"> 最新</label>`
+                + `<label style="cursor:pointer; margin-left:12px;"><input type="radio" name="hist-mode" value="all" onchange="updateHistPreview('all')" style="width:14px; height:14px; margin:0 3px 0 0; vertical-align:middle;"> 全部(${f.histList.length}件)</label>`
+                + `</span><br><span class="co-val" id="hist-preview">${escHtml(f.histList[0])}</span></span></div>`;
+        }
+        html += rowOpt('app', 'アプリのリンク', f.app);
         html += rowOpt('map', 'Googleマップのリンク', f.map);
-        if (!f.addr && !f.hist && !f.map) html += `<div style="color:#aaa; font-size:12px;">コピーできる情報がありません。</div>`;
+        if (!f.addr && !f.histList.length && !f.map) html += `<div style="color:#aaa; font-size:12px;">コピーできる情報がありません。</div>`;
         else html += `<button class="save-btn" style="width:100%; margin-top:8px;" onclick="doInfoCopy()">📋 選んだ項目をコピー</button>`;
         document.getElementById('info-copy-body').innerHTML = html;
         document.getElementById('info-copy-modal').style.display = 'flex';
@@ -3656,16 +3664,27 @@
     }
     function doInfoCopy() {
         if (!infoCopyCtx) return;
-        const labelMap = { addr: '住所', hist: '最新記録', app: 'アプリ', map: '地図' };
+        const f = infoCopyCtx;
+        const isOn = k => { const cb = document.querySelector('#info-copy-body input[data-ck="' + k + '"]'); return cb && cb.checked; };
         const lines = [];
-        document.querySelectorAll('#info-copy-body input[data-ck]').forEach(cb => {
-            const k = cb.getAttribute('data-ck');
-            if (cb.checked && infoCopyCtx[k]) lines.push(labelMap[k] + ': ' + infoCopyCtx[k]);
-        });
+        if (isOn('addr') && f.addr) lines.push(f.addr); // 住所は値のみ（ラベル文字は付けない）
+        if (isOn('hist') && f.histList && f.histList.length) {
+            const m = document.querySelector('#info-copy-body input[name="hist-mode"]:checked');
+            lines.push((m && m.value === 'all') ? f.histList.join('\n') : f.histList[0]); // 履歴も値のみ（最新 or 全部）
+        }
+        if (isOn('app') && f.app) lines.push('■アプリのリンク\n' + f.app);   // リンクは見出し＋改行＋URL
+        if (isOn('map') && f.map) lines.push('■Googleマップのリンク\n' + f.map);
         if (!lines.length) { showToast('項目が選ばれていません', true); return; }
         copyTextToClipboard_(lines.join('\n'))
             .then(() => { closeInfoCopy(); showToast('コピーしました', false); })
             .catch(() => { showToast('コピーに失敗しました', true); });
+    }
+    // 履歴の最新/全部 切替時にプレビュー表示を更新
+    function updateHistPreview(mode) {
+        const el = document.getElementById('hist-preview');
+        if (!el || !infoCopyCtx) return;
+        const list = infoCopyCtx.histList || [];
+        el.textContent = !list.length ? '履歴なし' : (mode === 'all' ? (list.length + '件すべて') : list[0]);
     }
     function copyTextToClipboard_(text) {
         if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
