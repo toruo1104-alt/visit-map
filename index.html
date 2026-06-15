@@ -2495,7 +2495,7 @@
             + '</div>';
         html += `<div style="background:#f0f7f9; border:1px solid #cfe3ec; border-radius:8px; padding:10px; margin-bottom:10px;">`
             + `<div style="font-weight:bold; font-size:15px;">全体（${ML[mode]}）</div>`
-            + `<div style="font-size:14px; margin:4px 0;">${doneLabel} ${fmtNum_(g.done)} / ${fmtNum_(g.total)}　<b style="color:${barColor_(grate)};">${grate}%</b>　残 ${fmtNum_(Math.max(0, g.total - g.done))}</div>`
+            + `<div style="font-size:14px; margin:4px 0;">${doneLabel} ${fmtNum_(g.done)} / ${fmtNum_(g.total)}　<b style="color:${barColor_(grate)};">${grate}%</b>　（残 ${fmtNum_(Math.max(0, g.total - g.done))}）</div>`
             + progBar_(grate) + '</div>';
         const visD_ = Object.keys(tree).filter(d => { const t = progTotals_(tree[d].total, mode); return !(t.total === 0 && t.done === 0); });
         const allOpen_ = visD_.length > 0 && visD_.every(d => progState.open[d]); // 表示中の全地区が開いているか（1ボタンで開閉を切替）
@@ -2508,16 +2508,17 @@
         sortProg_(rows);
         rows.forEach(row => {
             const d = row.d, t = row.t, rate = row.rate, opened = !!progState.open[d];
-            html += `<div class="lend-row" style="cursor:pointer; border-bottom:2px solid #8a949c;" onclick="toggleProgDistrict('${escHtml(d)}')">`
-                + `<div class="grow"><b>${opened ? '▾' : '▸'} ${escHtml(d)}</b>　<span style="font-size:12px; color:#333;">${fmtNum_(t.done)}/${fmtNum_(t.total)}・残${fmtNum_(rem_(t))}</span>${progBar_(rate)}</div>`
+            html += `<div class="lend-row" style="cursor:pointer; ${opened ? '' : 'border-bottom:2px solid #8a949c;'}" onclick="toggleProgDistrict('${escHtml(d)}')">`
+                + `<div class="grow"><b>${opened ? '▾' : '▸'} ${escHtml(d)}</b>　<span style="font-size:12px; color:#333;">${fmtNum_(t.done)}/${fmtNum_(t.total)}（残 ${fmtNum_(rem_(t))}）</span>${progBar_(rate)}</div>`
                 + `<div style="width:50px; text-align:right; font-weight:bold; color:${barColor_(rate)};">${pctTxt_(t)}</div></div>`;
             if (opened) {
                 const crows = Object.keys(tree[d].chomes).map(c => { const ct = progTotals_(tree[d].chomes[c], mode); return { c: c, ct: ct, rate: fmtPct_(ct.done, ct.total), cnt: ct.total, stat: tree[d].chomes[c] }; })
                     .filter(cr => !(cr.ct.total === 0 && cr.ct.done === 0));
                 sortProg_(crows);
-                crows.forEach(cr => {
+                crows.forEach((cr, ci) => {
                     const s = cr.stat, extra = (mode !== 'pin' && (s.vacant || s.refuse)) ? `　空${s.vacant}/拒${s.refuse}` : ''; // ピン基準では空き家/拒否(訪問状態)は出さない
-                    html += `<div class="lend-row" style="padding-left:16px; background:#e9eef2;"><div class="grow"><span style="font-size:13px;">${escHtml(cr.c)}</span>　<span style="font-size:11px; color:#555;">${fmtNum_(cr.ct.done)}/${fmtNum_(cr.ct.total)}${extra}</span>${progBar_(cr.rate)}</div><div style="width:46px; text-align:right; font-size:13px; color:${barColor_(cr.rate)};">${pctTxt_(cr.ct)}</div></div>`;
+                    const lastC = (ci === crows.length - 1) ? 'border-bottom:2px solid #8a949c;' : ''; // 地区の最後の丁目の下に太線（地区の区切り）
+                    html += `<div class="lend-row" style="padding-left:16px; background:#e9eef2; ${lastC}"><div class="grow"><span style="font-size:13px;">${escHtml(cr.c)}</span>　<span style="font-size:11px; color:#555;">${fmtNum_(cr.ct.done)}/${fmtNum_(cr.ct.total)}（残 ${fmtNum_(rem_(cr.ct))}）${extra}</span>${progBar_(cr.rate)}</div><div style="width:46px; text-align:right; font-size:13px; color:${barColor_(cr.rate)};">${pctTxt_(cr.ct)}</div></div>`;
                 });
             }
         });
@@ -2866,7 +2867,7 @@
             listAreas = chomeAreas.filter(a => { const n = banchiNum(a); return n >= rstart && n <= rstart + 19; });
         }
 
-        const groupSel = `<select style="flex:1; min-width:0;" onchange="lendSel('group', this.value)"><option value="">全グループ</option>${groups.map(g => opt(g, g, s.group)).join('')}${opt(SHARED_GROUP_NAME, '👪 全体利用（共同利用）', s.group)}</select>`;
+        const groupSel = `<select style="flex:1; min-width:0;" onchange="lendSel('group', this.value)"><option value="">グループ選択</option>${groups.map(g => opt(g, g, s.group)).join('')}${opt(SHARED_GROUP_NAME, '👪 全体利用（共同利用）', s.group)}</select>`;
         const userSel = isShared
             ? `<select style="flex:2; min-width:0;" disabled><option selected>👪 全体利用（全員で共同利用）</option></select>`
             : `<select style="flex:2; min-width:0;" onchange="lendSel('email', this.value)"><option value="">-- ユーザー選択 --</option>${s.group ? opt('__GROUP__', '🟢 ' + s.group + '（グループ全体）', s.email) : ''}${users.map(u => opt(u.email, (u.name || u.email) + (u.group ? '（' + u.group + '）' : ''), s.email)).join('')}</select>`;
@@ -2890,14 +2891,14 @@
                     ? `<span style="color:#C75F56;">貸出中（${a.lendCount || 1}回目）: ${escHtml(who)}（${escHtml(a.lendDate || '-')} → <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span>）</span>`
                     : `<span style="color:#555;">最終返却日: ${escHtml(a.lastReturn || 'なし')}　これまで ${a.lendCount || 0} 回</span>`;
                 const off = lent2 || !canLend;
+                const dateInput = lent2 ? '' : `<input type="date" id="lend-due-${a.id}" value="${lendDefaultDue()}" style="font-size:12px; padding:2px 4px; width:120px; margin-left:8px; vertical-align:middle;">`; // 未貸出のみ。状態行の「これまでX回」の右に小さく表示
                 return `<div class="lend-item">`
                     + `<div style="display:flex; gap:6px; align-items:center;">`
                     + `<div style="flex:1; min-width:0;"><b style="font-size:15px;">${escHtml(num)}</b><span style="color:#777; font-size:12px;">（${a.count === '' || a.count == null ? '-' : a.count}件）</span></div>`
-                    + `<button class="choice-btn" style="flex:0 0 auto; background:#eef3f6; padding:6px 9px;" onclick="previewLendArea(${a.id})">🗺</button>`
-                    + `<input type="date" id="lend-due-${a.id}" value="${lendDefaultDue()}" style="flex:0 0 auto; width:128px; min-width:0;">`
-                    + `<button class="choice-btn" style="flex:0 0 auto; padding:6px 10px; ${off ? 'background:#b9c2c8; border-color:#b9c2c8; color:#f0f0f0; cursor:not-allowed;' : 'background:#5E9DB8; border-color:#5E9DB8; color:#fff;'}" onclick="doLendArea(${a.id})" ${off ? 'disabled' : ''}>貸出</button>`
+                    + `<button class="choice-btn" style="flex:0 0 auto; background:#eef3f6; padding:6px 12px;" onclick="previewLendArea(${a.id})">地図</button>`
+                    + `<button class="choice-btn" style="flex:0 0 auto; padding:6px 18px; ${off ? 'background:#b9c2c8; border-color:#b9c2c8; color:#f0f0f0; cursor:not-allowed;' : 'background:#5E9DB8; border-color:#5E9DB8; color:#fff;'}" onclick="doLendArea(${a.id})" ${off ? 'disabled' : ''}>貸出</button>`
                     + `</div>`
-                    + `<div style="font-size:12px; margin-top:4px;">${statusHtml}</div>`
+                    + `<div style="font-size:12px; margin-top:4px;">${statusHtml}${dateInput}</div>`
                     + `</div>`;
             }).join('');
         } else if (s.district && (noChome || s.chome)) {
