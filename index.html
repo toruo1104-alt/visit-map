@@ -189,12 +189,12 @@
         #menu-panel.show { display: block; }
         .menu-item { display: block; width: 100%; text-align: left; background: none; border: none; padding: 11px 12px; font-size: 15px; cursor: pointer; border-radius: 6px; }
         .menu-item:active { background: #eef3f6; }
-        .menu-item.admin-only { display: none; }            /* 管理項目は admin のみ表示 */
-        body.is-admin .menu-item.admin-only { display: block; background: #eef4f7; border-left: 3px solid #5E9DB8; } /* 管理項目は淡い青＋左の青帯で通常項目と区別 */
+        .menu-item.need-lend, .menu-item.need-manage, .menu-item.need-sys { display: none; } /* 役割で出し分け */
+        body.role-lend .menu-item.need-lend, body.role-manage .menu-item.need-manage, body.role-sys .menu-item.need-sys { display: block; background: #eef4f7; border-left: 3px solid #5E9DB8; } /* 権限項目は淡い青＋左の青帯で区別 */
         .menu-section { display: none; font-size: 11px; color: #7f8c93; font-weight: bold; padding: 9px 12px 3px; border-top: 1px solid #e1e6e9; margin-top: 4px; } /* 管理者メニューの見出し（adminのみ） */
-        body.is-admin .menu-section { display: block; }
+        body.role-lend .menu-section { display: block; }
         /* 印刷用表示（admin・PC/タブレット。A4横・左=詳細地図/右=広域地図・白黒・大きめ文字。年配者向け） */
-        @media (max-width: 768px) { body.is-admin .menu-item.pc-only { display: none; } } /* スマホでは出さない */
+        @media (max-width: 768px) { body.role-lend .menu-item.pc-only { display: none; } } /* スマホでは出さない */
         #print-view { display: none; position: fixed; inset: 0; z-index: 10010; background: #fff; color: #000; overflow: auto; padding: 14px 18px; }
         #print-view * { box-sizing: border-box; }
         .print-head { font-size: 22px; font-weight: bold; border-bottom: 3px solid #000; padding-bottom: 6px; margin-bottom: 8px; }
@@ -325,12 +325,12 @@
 <div id="menu-panel">
     <button class="menu-item" onclick="closeMenu(); showMyAreas();">📋 割り当て区域</button>
     <button class="menu-item" onclick="event.stopPropagation(); closeMenu(); toggleLegend();">🗺 凡例</button>
-    <div class="menu-section admin-only">管理者メニュー</div>
-    <button class="menu-item admin-only" onclick="closeMenu(); showLendScreen();">🗂 区域の貸出・返却</button>
-    <button class="menu-item admin-only" onclick="closeMenu(); showUserAdmin();">👥 ユーザー管理</button>
-    <button class="menu-item admin-only" onclick="closeMenu(); showMaintenance();">🧹 メンテナンス</button>
-    <button class="menu-item admin-only" onclick="closeMenu(); showProgress();">📈 進捗モニタリング</button>
-    <button class="menu-item admin-only pc-only" onclick="closeMenu(); showPrintView();">🖨 印刷用表示（PC/タブレット）</button>
+    <div class="menu-section">管理メニュー</div>
+    <button class="menu-item need-lend" onclick="closeMenu(); showLendScreen();">🗂 区域の貸出・返却</button>
+    <button class="menu-item need-lend pc-only" onclick="closeMenu(); showPrintView();">🖨 印刷用表示（PC/タブレット）</button>
+    <button class="menu-item need-lend" onclick="closeMenu(); showProgress();">📈 進捗モニタリング</button>
+    <button class="menu-item need-manage" onclick="closeMenu(); showUserAdmin();">👥 ユーザー管理</button>
+    <button class="menu-item need-sys" onclick="closeMenu(); showMaintenance();">🧹 メンテナンス</button>
     <button class="menu-item" onclick="closeMenu(); signOut();">🚪 サインアウト</button>
 </div>
 
@@ -413,7 +413,7 @@
     const MY_TOKEN = 'pk.eyJ1IjoidG9ydW8xMTA0IiwiYSI6ImNtcTdlOGp2MzBhY3QycXBocno2OHQ5dmoifQ.bfkHvR5OmkacGJsDorHL5Q';
     mapboxgl.accessToken = MY_TOKEN;
     // ↓ デプロイした GAS Webアプリの URL（.../exec）に置き換える
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzKSVQGBBoS7Ewzq-7K-4_vXG0EiojXWov7NOtChvheBFMonPDbaLc7D8DXL_bpoux6/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwuG0lo50PczEwZPDqnZQKQWZo6h_YJHc_hb9za4Xpkjl3VPVAPLaN-8wM_-sAgreAm/exec";
     // ↓ Google Cloud で発行した OAuth クライアントID（code_api.gs と同一値）
     const GOOGLE_CLIENT_ID = "273556684740-01e17ja1as1pchs4cvlfqvh67vbt51l3.apps.googleusercontent.com";
     // ↓ 地図スタイル（Mapbox Studio のスタイルURL。標準に戻す場合は 'mapbox://styles/mapbox/streets-v12'）
@@ -425,6 +425,8 @@
     const AREA_PROXIMITY = MAP_HOME.lng + ',' + MAP_HOME.lat; // Mapboxフォールバック検索の優先中心
 
     let ID_TOKEN = ''; // 「Googleで続ける」で取得した署名付きIDトークン(JWT)
+    let appEntered = false;       // enterApp を一度だけ実行（黙ってトークン更新するときは画面を作り直さない）
+    let tokenRefreshTimer = null; // 失効少し前に黙って新トークンを再取得するタイマー
 
     /* ── セッション維持（トークン有効期限まで再認証不要・画面更新やアプリ復帰でも継続） ──
        取得済みIDトークンを localStorage に保存し、未失効の間は認証画面を出さずに自動復帰する。
@@ -464,6 +466,8 @@
         const token = loadValidSession();
         if (!token) return false;
         ID_TOKEN = token;
+        appEntered = true;
+        scheduleTokenRefresh(); // 復帰後も失効前の自動更新を予約
         enterApp();
         return true;
     }
@@ -553,12 +557,30 @@
             console.log('サインイン:', payload.email, payload.name);
         } catch (e) {}
         saveSession(ID_TOKEN); // 保存セッションとして記録（失効まで自動復帰）
-        enterApp();
+        scheduleTokenRefresh(); // 失効前に黙って更新を予約（継続使用で再ログインを避ける）
+        if (!appEntered) { appEntered = true; enterApp(); } // 初回のみ画面遷移。更新時はトークンだけ差し替える
+    }
+    // 取得済みトークンの失効3分前に、GISの auto_select で黙って新トークンを再発行する。
+    // 成功すると handleCredential が再度呼ばれてトークンが差し替わり、次回ぶんも再予約される（更新の連鎖）。
+    // Googleのログインセッションが生きていれば無操作で更新。失敗時は従来どおり失効→再ログイン（フォールバック）。
+    function scheduleTokenRefresh() {
+        if (tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
+        try {
+            const payload = JSON.parse(decodeURIComponent(escape(atob(
+                ID_TOKEN.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+            ))));
+            const ms = payload.exp * 1000 - Date.now() - 180000; // 失効3分前に更新を試みる
+            tokenRefreshTimer = setTimeout(function () {
+                try { google.accounts.id.prompt(); } catch (e) {}
+            }, Math.max(ms, 5000));
+        } catch (e) {}
     }
 
     // サインアウト：トークンを破棄してログイン画面へ戻す
     function signOut() {
         ID_TOKEN = '';
+        appEntered = false;
+        if (tokenRefreshTimer) { clearTimeout(tokenRefreshTimer); tokenRefreshTimer = null; } // 自動更新を止める
         clearSession(); // 保存セッションも破棄
         try { google.accounts.id.disableAutoSelect(); } catch (e) {}
         currentMarkers.forEach(function (m) { m.remove(); });
@@ -569,8 +591,8 @@
         document.getElementById('legend-panel').classList.remove('show');
         closeMenu();
         closeAppModal();
-        document.body.classList.remove('is-admin');
-        ME = { email: '', name: '', group: '', isAdmin: false };
+        document.body.classList.remove('role-lend', 'role-manage', 'role-sys');
+        ME = { email: '', name: '', group: '', level: 0 };
         closeAreaNav();
         clearBanchiBox();
         didAutoGeolocate = false; // 次回サインイン時にまた現在地へ寄せる
@@ -1852,14 +1874,14 @@
     }
 
     /* ── 建物名の自動入力（試験的）：タップ地点の最寄りPOI名を Mapbox Tilequery API で取得する ──
-       地図タイルのPOIデータ（mapbox-streets-v8）を座標で照会し、30m以内で最も近い「名前を持つ」
+       地図タイルのPOIデータ（mapbox-streets-v8）を座標で照会し、15m以内で最も近い「名前を持つ」
        地物の名前（日本語優先）を建物名欄へ事前入力する。
        ・取得できない／該当なしの場合は何もしない（従来どおり空欄で手入力）
        ・利用者がすでに入力を始めていたら上書きしない
        ・日本の住宅地ではPOI収録が疎らなため、アパート名は取れないことも多い（精度は実地確認） */
     function prefillNearestBuildingName(lng, lat) {
         const url = 'https://api.mapbox.com/v4/mapbox.mapbox-streets-v8/tilequery/'
-            + lng + ',' + lat + '.json?radius=30&limit=10&layers=poi_label&access_token='
+            + lng + ',' + lat + '.json?radius=15&limit=10&layers=poi_label&access_token='
             + encodeURIComponent(mapboxgl.accessToken);
         fetch(url).then(r => r.json()).then(d => {
             const el = document.getElementById('new-name');
@@ -2211,11 +2233,14 @@
      *  メニュー／割り当て区域／管理画面（区域の貸出・返却、ユーザー管理）
      *  データは UserList / AreaList / LendLog（GAS側 getMe ほか）を参照。
      * ========================================================================= */
-    let ME = { email: '', name: '', group: '', isAdmin: false };
+    let ME = { email: '', name: '', group: '', level: 0 };
     function loadMe() {
         apiCall('getMe', {}).then(me => {
             ME = me || ME;
-            document.body.classList.toggle('is-admin', !!ME.isAdmin); // メニューの管理項目の出し分け
+            const lv = ME.level || 0; // 役割でメニューを出し分け（1=貸し出し係/2=管理者/3=システム管理者。上位は下位を内包）
+            document.body.classList.toggle('role-lend', lv >= 1);
+            document.body.classList.toggle('role-manage', lv >= 2);
+            document.body.classList.toggle('role-sys', lv >= 3);
             // 番地データ（マスタ＝GASのAREA_DEF）を受け取り、フォールバックを上書きして保持する
             if (me && me.areaDef) {
                 AREA_DATA = me.areaDef;
@@ -2762,7 +2787,7 @@
         html += userAdminState.map((u, i) => {
             // オーナーはメール変更・降格・削除・無効化を不可にする（漢字名・グループは編集可。サーバー側でも検証している）
             const isOwner = !!(ME.owner && String(u.email).trim().toLowerCase() === ME.owner);
-            if (isOwner) { u.role = 'admin'; u.active = true; } // 表示と送信値を一致させる（シート手編集で崩れていても矯正）
+            if (isOwner) { u.role = 'sysadmin'; u.active = true; } // 表示と送信値を一致させる（シート手編集で崩れていても矯正）
             const inactive = (u.active === false);
             const emailAttrs = isOwner
                 ? 'readonly style="flex:2; min-width:170px; font-size:13px; padding:6px; background:#f0f0f0; color:#777;"'
@@ -2772,8 +2797,8 @@
                 ? ''
                 : `<select style="font-size:13px; padding:6px; ${inactive ? 'color:#C75F56; font-weight:bold;' : ''}" onchange="userAdminState[${i}].active = (this.value === '1'); renderUserAdmin();"><option value="1" ${!inactive ? 'selected' : ''}>有効</option><option value="0" ${inactive ? 'selected' : ''}>無効</option></select>`;
             const roleControl = isOwner
-                ? '<span style="font-size:12px; color:#B0763C; font-weight:bold; padding:6px 2px; white-space:nowrap;">👑 オーナー（管理者）</span>'
-                : `<select style="font-size:13px; padding:6px;" onchange="userAdminState[${i}].role = this.value"><option value="user" ${u.role !== 'admin' ? 'selected' : ''}>一般</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>管理者</option></select>`
+                ? '<span style="font-size:12px; color:#B0763C; font-weight:bold; padding:6px 2px; white-space:nowrap;">👑 オーナー（システム管理者）</span>'
+                : `<select style="font-size:13px; padding:6px;" onchange="userAdminState[${i}].role = this.value"><option value="user" ${u.role === 'user' ? 'selected' : ''}>一般</option><option value="lender" ${u.role === 'lender' ? 'selected' : ''}>貸し出し係</option><option value="manager" ${u.role === 'manager' ? 'selected' : ''}>管理者</option><option value="sysadmin" ${u.role === 'sysadmin' ? 'selected' : ''}>システム管理者</option></select>`
                   + `<button class="clear-btn" onclick="userAdminState.splice(${i}, 1); renderUserAdmin();">削除</button>`;
             return `<div class="lend-row user-row" style="flex-wrap:wrap; ${inactive ? 'opacity:0.6; background:#f1f2f4;' : ''}">`
                 + `<input ${emailAttrs} placeholder="メールアドレス" value="${escHtml(u.email)}">`
@@ -2791,7 +2816,7 @@
     }
     function saveUserAdmin() {
         const users = userAdminState
-            .map(u => ({ email: String(u.email || '').trim().toLowerCase(), name: u.name || '', role: u.role === 'admin' ? 'admin' : 'user', group: u.group || '', active: u.active !== false }))
+            .map(u => ({ email: String(u.email || '').trim().toLowerCase(), name: u.name || '', role: u.role || 'user', group: u.group || '', active: u.active !== false }))
             .filter(u => u.email);
         appConfirm('ユーザー一覧を保存し、スプレッドシートの共有にも反映します。', { okLabel: '保存する' }).then(ok => {
             if (!ok) return;
