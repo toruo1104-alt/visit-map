@@ -235,6 +235,17 @@
         #app-modal-head button { min-width: 48px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; font-size: 13px; cursor: pointer; }
         #app-modal-body { padding: 12px; overflow-y: auto; font-size: 14px; }
         #app-modal-body select, #app-modal-body input { box-sizing: border-box; padding: 8px; font-size: 15px; border: 1px solid #bbb; border-radius: 6px; }
+        /* 情報コピー（ピン吹き出しの長押しで開く小モーダル） */
+        #info-copy-modal { position: absolute; inset: 0; z-index: 10007; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; padding: 16px; }
+        #info-copy-card { background: #fff; border-radius: 10px; width: min(360px, 92vw); max-height: 84vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        #info-copy-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #eee; }
+        #info-copy-head span { flex: 1; font-weight: bold; font-size: 15px; }
+        #info-copy-head button { min-width: 48px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 6px; padding: 4px 8px; font-size: 13px; cursor: pointer; }
+        #info-copy-body { padding: 12px; overflow-y: auto; font-size: 14px; }
+        .copy-opt { display: flex; align-items: flex-start; gap: 8px; padding: 8px; border: 1px solid #e3e6e8; border-radius: 8px; margin-bottom: 6px; cursor: pointer; }
+        .copy-opt input { margin-top: 3px; flex-shrink: 0; width: 18px; height: 18px; }
+        .copy-opt .co-label { font-weight: bold; font-size: 12px; color: #555; }
+        .copy-opt .co-val { font-size: 13px; color: #222; word-break: break-all; }
         .lend-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px dashed #e3e3e3; }
         .lend-row .grow { flex: 1; min-width: 0; }
         /* ユーザー管理は1行=1ユーザー。区切りをはっきりさせる（濃い実線） */
@@ -349,6 +360,14 @@
             <button onclick="closeAppModal()">✕</button>
         </div>
         <div id="app-modal-body"></div>
+    </div>
+</div>
+
+<!-- 情報コピー（戸建て=吹き出しの「戸建て」長押し／集合住宅=部屋番号長押しで開く）。Esc/✕/背景で閉じる -->
+<div id="info-copy-modal" onclick="if(event.target===this)closeInfoCopy()">
+    <div id="info-copy-card">
+        <div id="info-copy-head"><span>📋 情報コピー</span><button onclick="closeInfoCopy()">✕</button></div>
+        <div id="info-copy-body"></div>
     </div>
 </div>
 
@@ -1132,7 +1151,7 @@
         const finish = () => { clearTimeout(timer); if (!longFired && !moved) onTap(); };
         el.addEventListener('touchstart', (e) => { const t = e.touches[0]; begin(t.clientX, t.clientY); }, { passive: true });
         el.addEventListener('touchmove', (e) => { const t = e.touches[0]; if (t) movecheck(t.clientX, t.clientY); }, { passive: true });
-        el.addEventListener('touchend', (e) => { e.preventDefault(); finish(); });
+        el.addEventListener('touchend', (e) => { if (longFired) e.preventDefault(); finish(); }); // 長押し時のみ既定動作を止める（タップ/横スクロールは妨げない）
         el.addEventListener('mousedown', (e) => begin(e.clientX, e.clientY));
         el.addEventListener('mousemove', (e) => { if (timer) movecheck(e.clientX, e.clientY); });
         el.addEventListener('mouseup', finish);
@@ -1681,6 +1700,8 @@
     // 入力フォームや詳細ポップアップが開いていれば閉じる。閉じたものがあれば true を返す。
     function closeOpenForms() {
         let closed = false;
+        const infoCopy = document.getElementById('info-copy-modal');
+        if (infoCopy && infoCopy.style.display === 'flex') { closeInfoCopy(); return true; } // 最前面の情報コピーを先に閉じる
         const appModal = document.getElementById('app-modal');
         if (appModal && appModal.style.display === 'flex') { closeAppModal(); return true; } // 管理モーダル（割り当て/貸出/ユーザー/メンテ/進捗）も Esc・背景タップで閉じる
         if (activeNewMarker) { activeNewMarker.remove(); activeNewMarker = null; closed = true; }
@@ -2245,7 +2266,7 @@
     function loadMe() {
         apiCall('getMe', {}).then(me => {
             ME = me || ME;
-            const lv = ME.level || 0; // 役割でメニューを出し分け（1=貸し出し係/2=管理者/3=システム管理者。上位は下位を内包）
+            const lv = ME.level || 0; // 役割でメニューを出し分け（1=貸出係/2=管理者/3=システム管理者。上位は下位を内包）
             document.body.classList.toggle('role-lend', lv >= 1);
             document.body.classList.toggle('role-manage', lv >= 2);
             document.body.classList.toggle('role-sys', lv >= 3);
@@ -2882,17 +2903,26 @@
 
     // ── 管理: ユーザー管理（保存すると UserList とスプレッドシートの共有を更新） ──
     let userAdminState = [];
+    let userAdminFilter = { q: '', role: '', status: '' }; // ユーザー管理のフィルタ（メール/名前/グループ・権限・状態）
     function showUserAdmin() {
         openAppModal('👥 ユーザー管理');
         showBusy('読み込み中…');
         apiCall('getUsers', {}).then(list => {
             userAdminState = (list || []).map(u => ({ email: u.email, name: u.name, role: u.role, group: u.group, active: u.active !== false }));
+            userAdminFilter = { q: '', role: '', status: '' }; // 開くたびにフィルタは初期化（前回条件を持ち越さない）
             renderUserAdmin();
         }).catch(handleServerError).finally(hideBusy);
     }
     function renderUserAdmin() {
         const body = document.getElementById('app-modal-body');
         let html = '<div style="font-size:12px; color:#666; margin-bottom:8px;">保存すると、この一覧の内容で<b>スプレッドシートの共有も更新</b>されます（追加=招待・削除=解除）。<br><b>無効</b>＝行は残したまま<b>アプリのログインだけ拒否</b>（共有はそのまま。いつでも有効に戻せます）。</div>';
+        const _uf = userAdminFilter;
+        html += '<div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; align-items:center;">'
+            + `<input id="ua-filter-q" placeholder="🔍 メール／名前／グループ" value="${escHtml(_uf.q)}" style="flex:2; min-width:120px; font-size:13px; padding:6px;" oninput="userAdminFilter.q = this.value; applyUserFilter();">`
+            + `<select id="ua-filter-role" style="font-size:13px; padding:6px;" onchange="userAdminFilter.role = this.value; applyUserFilter();"><option value="">全権限</option><option value="user" ${_uf.role === 'user' ? 'selected' : ''}>一般</option><option value="lender" ${_uf.role === 'lender' ? 'selected' : ''}>貸出係</option><option value="manager" ${_uf.role === 'manager' ? 'selected' : ''}>管理者</option><option value="sysadmin" ${_uf.role === 'sysadmin' ? 'selected' : ''}>システム管理者</option></select>`
+            + `<select id="ua-filter-status" style="font-size:13px; padding:6px;" onchange="userAdminFilter.status = this.value; applyUserFilter();"><option value="">全状態</option><option value="active" ${_uf.status === 'active' ? 'selected' : ''}>有効</option><option value="inactive" ${_uf.status === 'inactive' ? 'selected' : ''}>無効</option></select>`
+            + '<span id="ua-filter-count" style="font-size:12px; color:#666; white-space:nowrap;"></span>'
+            + '</div>';
         html += userAdminState.map((u, i) => {
             // オーナーはメール変更・降格・削除・無効化を不可にする（漢字名・グループは編集可。サーバー側でも検証している）
             const isOwner = !!(ME.owner && String(u.email).trim().toLowerCase() === ME.owner);
@@ -2904,15 +2934,15 @@
             // 有効/無効（オーナーは常に有効・切替不可）。無効選択時は赤字＋行を淡色化
             const statusControl = isOwner
                 ? ''
-                : `<select style="font-size:13px; padding:6px; ${inactive ? 'color:#C75F56; font-weight:bold;' : ''}" onchange="userAdminState[${i}].active = (this.value === '1'); renderUserAdmin();"><option value="1" ${!inactive ? 'selected' : ''}>有効</option><option value="0" ${inactive ? 'selected' : ''}>無効</option></select>`;
+                : `<select data-uf="status" style="font-size:13px; padding:6px; ${inactive ? 'color:#C75F56; font-weight:bold;' : ''}" onchange="userAdminState[${i}].active = (this.value === '1'); renderUserAdmin();"><option value="1" ${!inactive ? 'selected' : ''}>有効</option><option value="0" ${inactive ? 'selected' : ''}>無効</option></select>`;
             const roleControl = isOwner
                 ? '<span style="font-size:12px; color:#B0763C; font-weight:bold; padding:6px 2px; white-space:nowrap;">👑 オーナー（システム管理者）</span>'
-                : `<select style="font-size:13px; padding:6px;" onchange="userAdminState[${i}].role = this.value"><option value="user" ${u.role === 'user' ? 'selected' : ''}>一般</option><option value="lender" ${u.role === 'lender' ? 'selected' : ''}>貸し出し係</option><option value="manager" ${u.role === 'manager' ? 'selected' : ''}>管理者</option><option value="sysadmin" ${u.role === 'sysadmin' ? 'selected' : ''}>システム管理者</option></select>`
+                : `<select data-uf="role" style="font-size:13px; padding:6px;" onchange="userAdminState[${i}].role = this.value; renderUserAdmin();"><option value="user" ${u.role === 'user' ? 'selected' : ''}>一般</option><option value="lender" ${u.role === 'lender' ? 'selected' : ''}>貸出係</option><option value="manager" ${u.role === 'manager' ? 'selected' : ''}>管理者</option><option value="sysadmin" ${u.role === 'sysadmin' ? 'selected' : ''}>システム管理者</option></select>`
                   + `<button class="clear-btn" onclick="userAdminState.splice(${i}, 1); renderUserAdmin();">削除</button>`;
-            return `<div class="lend-row user-row" style="flex-wrap:wrap; ${inactive ? 'opacity:0.6; background:#f1f2f4;' : ''}">`
-                + `<input ${emailAttrs} placeholder="メールアドレス" value="${escHtml(u.email)}">`
-                + `<input style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="漢字名" value="${escHtml(u.name)}" onchange="userAdminState[${i}].name = this.value">`
-                + `<input style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="グループ" value="${escHtml(u.group)}" onchange="userAdminState[${i}].group = this.value">`
+            return `<div class="lend-row user-row"${isOwner ? ' data-owner-role="sysadmin"' : ''} style="flex-wrap:wrap; ${inactive ? 'opacity:0.6; background:#f1f2f4;' : ''}">`
+                + `<input data-uf="email" ${emailAttrs} placeholder="メールアドレス" value="${escHtml(u.email)}">`
+                + `<input data-uf="name" style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="漢字名" value="${escHtml(u.name)}" onchange="userAdminState[${i}].name = this.value">`
+                + `<input data-uf="group" style="flex:1; min-width:70px; font-size:13px; padding:6px;" placeholder="グループ" value="${escHtml(u.group)}" onchange="userAdminState[${i}].group = this.value">`
                 + statusControl
                 + roleControl
                 + `</div>`;
@@ -2922,6 +2952,32 @@
             + `<button class="choice-btn" style="flex:1; background:#5E9DB8; border-color:#5E9DB8; color:#fff;" onclick="saveUserAdmin()">保存する</button>`
             + '</div>';
         body.innerHTML = html;
+        applyUserFilter();
+    }
+    // ユーザー管理のフィルタ適用（行の input/select を直接読んで表示/非表示を切替。再描画しないので入力欄のフォーカスを保てる）
+    function applyUserFilter() {
+        const f = userAdminFilter; const q = (f.q || '').trim().toLowerCase();
+        let shown = 0, total = 0;
+        document.querySelectorAll('#app-modal-body .user-row').forEach(row => {
+            total++;
+            const val = sel => { const el = row.querySelector(sel); return el ? String(el.value || '') : ''; };
+            const email = val('input[data-uf="email"]').toLowerCase();
+            const name = val('input[data-uf="name"]').toLowerCase();
+            const group = val('input[data-uf="group"]').toLowerCase();
+            const roleEl = row.querySelector('select[data-uf="role"]');
+            const role = roleEl ? roleEl.value : (row.dataset.ownerRole || 'sysadmin');
+            const stEl = row.querySelector('select[data-uf="status"]');
+            const active = stEl ? (stEl.value === '1') : true; // オーナー行はセレクトが無く常に有効
+            let ok = true;
+            if (q && !(email.indexOf(q) >= 0 || name.indexOf(q) >= 0 || group.indexOf(q) >= 0)) ok = false;
+            if (f.role && role !== f.role) ok = false;
+            if (f.status === 'active' && !active) ok = false;
+            if (f.status === 'inactive' && active) ok = false;
+            row.style.display = ok ? '' : 'none';
+            if (ok) shown++;
+        });
+        const c = document.getElementById('ua-filter-count');
+        if (c) c.textContent = shown + ' / ' + total + ' 件';
     }
     function saveUserAdmin() {
         const users = userAdminState
@@ -3014,6 +3070,8 @@
                 if (isShuga) resetRoomActionPanel(popup);
                 fillDerivedAddress(popup.getElement()); // 住所（街区内包方式）を算出して表示
                 if (!isShuga) attachHistoryLongPress(popup.getElement(), firstItem.rowNumber, false); // 戸建て履歴の長押し編集
+                if (isShuga) bindRoomCopyCells(popup.getElement(), firstItem.rowNumber); // 部屋: タップ=操作欄 / 長押し=情報コピー
+                else bindTitleCopy(popup.getElement(), firstItem.rowNumber);              // 戸建て: 「戸建て」長押し=情報コピー
                 fitPopupInView(marker, 0); // 部屋操作欄は最初から高さを確保するので追加余白は不要
             });
             // 吹き出しを閉じたら、展開中のUI（編集フォーム・詳細表示・属性4択・部屋操作欄）を初期状態へ戻す
@@ -3109,7 +3167,7 @@
                     const v = roomVisual(st);
                     let label = (st === '訪問拒否' || st === '外国語') ? '☆' : (hideNum ? cornerLabel(f, r, floors, maxRoom) : String(roomNum));
                     if (roomMarkMap[roomNum]) label = roomMarkLabel(roomMarkMap[roomNum]); // 個人宅=🏠／会社=🏢
-                    gridHtml += `<td class="cell-active" data-room="${roomNum}" style="min-width:40px; background:${v.bg}; color:${v.color};" onclick="showRoomAction(${first.rowNumber}, ${roomNum}, this)">${label}</td>`;
+                    gridHtml += `<td class="cell-active" data-room="${roomNum}" style="min-width:40px; background:${v.bg}; color:${v.color};">${label}</td>`;
                 } else {
                     gridHtml += `<td class="cell-inactive"></td>`;
                 }
@@ -3437,6 +3495,7 @@
                 popup.setHTML('<div class="popup-content">' + createKodedateViewHtml(item) + '</div>');
                 fillDerivedAddress(popup.getElement());
                 attachHistoryLongPress(popup.getElement(), rowNumber, false); // 履歴欄を作り直したので長押しを付け直す
+                bindTitleCopy(popup.getElement(), rowNumber); // タイトル長押し（情報コピー）も付け直す
             } else {
                 renderMarkers(latest); // フォールバック
             }
@@ -3469,6 +3528,7 @@
                 popup.setHTML('<div class="popup-content">' + createShugaViewHtml([item]) + '</div>');
                 const root = popup.getElement();
                 fillDerivedAddress(root);
+                bindRoomCopyCells(root, buildingRow); // グリッドを作り直したので部屋長押し（情報コピー）を付け直す
                 const newCell = root ? root.querySelector(`[data-room="${roomNum}"]`) : null;
                 showRoomAction(buildingRow, roomNum, newCell); // 操作欄を開き直し履歴も更新
             } else {
@@ -3541,9 +3601,95 @@
         if (item && popup) {
             popup.setHTML('<div class="popup-content">' + createShugaViewHtml([item]) + '</div>');
             fillDerivedAddress(popup.getElement());
+            bindRoomCopyCells(popup.getElement(), buildingRow); // 部屋長押し（情報コピー）を付け直す
         } else {
             renderMarkers(latest);
         }
+    }
+
+    // ── 情報コピー（住所・最新履歴・アプリリンク・地図リンクを選んでクリップボードへ） ──
+    // 吹き出しから 戸建て=「戸建て」長押し / 集合住宅=部屋番号長押し で openInfoCopyMenu を開く。
+    function effectiveAddress_(item) {
+        return (item.住所 && item.住所 !== '-' && String(item.住所).trim() !== '') ? String(item.住所).trim()
+            : (deriveAddress(parseFloat(item.経度), parseFloat(item.緯度)) || '');
+    }
+    function latestHistRecord_(item, roomNum) {
+        if (!item || !item.履歴データ) return '';
+        let arr; try { arr = JSON.parse(item.履歴データ); } catch (e) { return ''; }
+        if (!Array.isArray(arr) || !arr.length) return '';
+        if (roomNum != null && !isNaN(roomNum)) {
+            const prefix = roomNum + '号室';
+            const rec = arr.find(h => String(h.status).indexOf(prefix) === 0); // 新しい順なので最初の一致が最新
+            if (!rec) return '';
+            return ((rec.time || '') + ' ' + String(rec.status).slice(prefix.length).replace(/^[:：\s]+/, '')).trim();
+        }
+        return ((arr[0].time || '') + ' ' + (arr[0].status || '')).trim();
+    }
+    let infoCopyCtx = null; // 現在開いているコピー対象の {addr,hist,app,map}
+    function openInfoCopyMenu(rowNumber, roomNum) {
+        const item = currentData.find(d => d.rowNumber === rowNumber);
+        if (!item) { showToast('情報が見つかりませんでした', true); return; }
+        const lat = parseFloat(item.緯度), lng = parseFloat(item.経度);
+        let addr = effectiveAddress_(item);
+        if (roomNum != null) addr = (addr ? addr + ' ' : '') + roomNum + '号室';
+        infoCopyCtx = {
+            addr: addr,
+            hist: latestHistRecord_(item, roomNum),
+            app: location.origin + location.pathname + '?pin=' + rowNumber,
+            map: (!isNaN(lat) && !isNaN(lng)) ? ('https://www.google.com/maps/search/?api=1&query=' + lat + ',' + lng) : ''
+        };
+        const f = infoCopyCtx;
+        const rowOpt = (key, label, val) => val ? `<label class="copy-opt"><input type="checkbox" data-ck="${key}" checked><span><span class="co-label">${escHtml(label)}</span><br><span class="co-val">${escHtml(val)}</span></span></label>` : '';
+        let html = `<div style="font-size:12px; color:#666; margin-bottom:8px;">コピーする項目を選んで「コピー」を押してください。</div>`;
+        html += rowOpt('addr', roomNum != null ? '住所・部屋番号' : '住所', f.addr);
+        html += rowOpt('hist', '履歴の最新記録', f.hist);
+        html += rowOpt('app', 'アプリでこのピンを開くリンク', f.app);
+        html += rowOpt('map', 'Googleマップのリンク', f.map);
+        if (!f.addr && !f.hist && !f.map) html += `<div style="color:#aaa; font-size:12px;">コピーできる情報がありません。</div>`;
+        else html += `<button class="save-btn" style="width:100%; margin-top:8px;" onclick="doInfoCopy()">📋 選んだ項目をコピー</button>`;
+        document.getElementById('info-copy-body').innerHTML = html;
+        document.getElementById('info-copy-modal').style.display = 'flex';
+    }
+    function closeInfoCopy() {
+        document.getElementById('info-copy-modal').style.display = 'none';
+        infoCopyCtx = null;
+    }
+    function doInfoCopy() {
+        if (!infoCopyCtx) return;
+        const labelMap = { addr: '住所', hist: '最新記録', app: 'アプリ', map: '地図' };
+        const lines = [];
+        document.querySelectorAll('#info-copy-body input[data-ck]').forEach(cb => {
+            const k = cb.getAttribute('data-ck');
+            if (cb.checked && infoCopyCtx[k]) lines.push(labelMap[k] + ': ' + infoCopyCtx[k]);
+        });
+        if (!lines.length) { showToast('項目が選ばれていません', true); return; }
+        copyTextToClipboard_(lines.join('\n'))
+            .then(() => { closeInfoCopy(); showToast('コピーしました', false); })
+            .catch(() => { showToast('コピーに失敗しました', true); });
+    }
+    function copyTextToClipboard_(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+        return new Promise((resolve, reject) => {
+            const ta = document.createElement('textarea');
+            try {
+                ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px'; ta.style.opacity = '0';
+                document.body.appendChild(ta); ta.focus(); ta.select();
+                document.execCommand('copy') ? resolve() : reject();
+            } catch (e) { reject(e); } finally { if (ta.parentNode) ta.parentNode.removeChild(ta); }
+        });
+    }
+    // 戸建て: タイトル「戸建て」長押しで情報コピー。集合住宅: 部屋セル タップ=操作欄 / 長押し=情報コピー。
+    function bindTitleCopy(popupEl, rowNumber) {
+        if (!popupEl) return;
+        const t = popupEl.querySelector('.building-title');
+        if (t) attachLongPress(t, () => {}, () => openInfoCopyMenu(rowNumber, null));
+    }
+    function bindRoomCopyCells(popupEl, rowNumber) {
+        if (!popupEl) return;
+        popupEl.querySelectorAll('td.cell-active[data-room]').forEach(cell => {
+            const rn = parseInt(cell.getAttribute('data-room'));
+            attachLongPress(cell, () => showRoomAction(rowNumber, rn, cell), () => openInfoCopyMenu(rowNumber, rn));
+        });
     }
 
     // 履歴欄(R列)をすべてクリアする。削除と同様に実行前に必ず確認する。
