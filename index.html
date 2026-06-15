@@ -2504,7 +2504,7 @@
 
         // 詳細地図（左）。集合住宅カードの幅だけ左右に余白を確保し、その「中央領域」に枠をギリギリまで大きく収める。
         // カードは必ず余白帯（枠の左右外側）に置く＝赤枠とカードは重ならない。
-        const DW = 700, DH = 470, gap = 12, topPad = 8;
+        const DW = 1000, DH = 600, gap = 12, topPad = 8;   // 広域を廃止し詳細を全幅に
         const cardW = d => Math.min(parseInt(d.最大部屋番号 || 1), 6) * 40 + 46;
         const cardH = d => Math.min(parseInt(d.階数 || 1), 8) * 36 + 40;
         const sideOf = d => (+d.経度 < cLng) ? 'L' : 'R';
@@ -2546,14 +2546,6 @@
         });
         ovD += `</svg>`;
 
-        // 広域地図（右）。区域の全体が見える広さ（詳細−3ズーム）。四角は出さず、位置を★で示す
-        const OW = 300, OH = 470;
-        const oZoom = Math.max(11, dZoom - 3);
-        const oProj = mercProjector_(cLng, cLat, oZoom, OW, OH);
-        const oUrl = staticMapUrl_(cLng, cLat, oZoom, OW, OH);
-        const ovO = `<svg class="ov" viewBox="0 0 ${OW} ${OH}">`
-            + `<polygon points="${starPts_(oProj.x(cLng), oProj.y(cLat), 13, 5.5)}" fill="#000" stroke="#000" stroke-width="1"/></svg>`;
-
         const now = new Date();
         const head = `${escHtml(currentBoxAddr || '（番地）')}　／　戸建て ${kodate.length}・集合住宅 ${shuga.length}　／　${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} 時点`;
 
@@ -2562,12 +2554,7 @@
             + `<div style="font-size:13px; color:#666;">ブラウザの印刷（Ctrl+P）で <b>A4・横</b>・白黒で印刷できます。地図を出すには印刷設定で「背景のグラフィック」をオンに。（○=戸建て / □＋番号=集合住宅 / 拒=訪問拒否・外=外国語）</div>`
             + `<button onclick="closePrintView()" style="font-size:16px; padding:7px 16px; border:1px solid #999; border-radius:6px; background:#f4f4f4; cursor:pointer; flex-shrink:0;">✕ 閉じる</button></div>`
             + `<div class="print-head">${head}</div>`
-            + `<div class="print-main">`
-            + `<div class="print-left"><div class="print-panel-title">この番地の詳細</div>`
-            + `<div class="print-map-wrap" style="width:${DW}px; height:${DH}px;"><img class="basemap" src="${dUrl}" alt="">${ovD}${cardsHtml}</div></div>`
-            + `<div class="print-right"><div class="print-panel-title">広域（位置の目安）</div>`
-            + `<div class="print-map-wrap" style="width:${OW}px; height:${OH}px;"><img class="basemap" src="${oUrl}" alt="">${ovO}</div></div>`
-            + `</div>`
+            + `<div class="print-map-wrap" style="width:${DW}px; height:${DH}px;"><img class="basemap" src="${dUrl}" alt="">${ovD}${cardsHtml}</div>`
             + `<div class="print-credit">地図 © Mapbox © OpenStreetMap</div>`;
 
         document.getElementById('print-view').style.display = 'block';
