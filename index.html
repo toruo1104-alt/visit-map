@@ -330,8 +330,8 @@
 <!-- メニューパネル（割り当て区域／管理機能／サインアウト。管理項目は admin のみ表示） -->
 <div id="menu-panel">
     <button class="menu-item" onclick="closeMenu(); showMyAreas();">📋 個人・グループの区域</button>
-    <button class="menu-item" onclick="closeMenu(); showSharedAreas();">🌐 全体利用の区域</button>
-    <button class="menu-item" onclick="event.stopPropagation(); closeMenu(); toggleLegend();">🗺 凡例</button>
+    <button class="menu-item" onclick="closeMenu(); showSharedAreas();">👪 全体利用の区域</button>
+    <button class="menu-item" onclick="event.stopPropagation(); closeMenu(); toggleLegend();">📖 凡例</button>
     <div class="menu-section">管理メニュー</div>
     <button class="menu-item need-lend" onclick="closeMenu(); showLendScreen();">🗂 区域の貸出・返却</button>
     <button class="menu-item need-lend pc-only" onclick="closeMenu(); showPrintView();">🖨 印刷用表示（PC/タブレット）</button>
@@ -377,7 +377,7 @@
 
 <!-- 凡例パネル -->
 <div id="legend-panel">
-    <div style="font-weight:bold; margin-bottom:6px; font-size:12px;">🗺 凡例</div>
+    <div style="font-weight:bold; margin-bottom:6px; font-size:12px;">📖 凡例</div>
     <div style="font-weight:bold; font-size:10px; color:#666; margin-bottom:2px;">── 戸建てマーカー ──</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#6FAEC0; border-radius:50%;">未</span>未訪問</div>
     <div class="legend-row"><span class="legend-chip" style="background:#fff; border:2px solid #333; color:#333; border-radius:50%;">1</span>不在(1回目)</div>
@@ -2667,7 +2667,7 @@
         renderSharedAreas();
     }
     function showSharedAreas() {
-        openAppModal('🌐 全体利用の区域');
+        openAppModal('👪 全体利用の区域');
         showBusy('読み込み中…');
         apiCall('getSharedAreas', {}).then(list => {
             sharedState.areas = list || [];
@@ -2735,10 +2735,10 @@
             t.onclick = () => { if (n) { sharedState.district = name; renderSharedAreas(); } };
             const c = document.createElementNS(NS, 'text');
             c.setAttribute('x', t.getAttribute('x'));
-            c.setAttribute('y', String(Number(t.getAttribute('y')) + 34));
+            c.setAttribute('y', String(Number(t.getAttribute('y')) + 52));
             c.setAttribute('text-anchor', 'middle');
             c.setAttribute('fill', n ? '#C75F56' : '#9aa6ad');
-            c.setAttribute('font-size', '30');
+            c.setAttribute('font-size', '26');
             c.setAttribute('font-weight', 'bold');
             c.setAttribute('pointer-events', 'none');
             c.textContent = n ? (n + '区域') : '0';
@@ -2789,9 +2789,9 @@
         const selArea = lendState.areas.find(a => String(a.id) === String(s.areaId));
         const uname = (em) => { const u = lendState.users.find(x => x.email === em); return u ? (u.name || u.email) : em; };
 
-        const groupSel = `<select style="flex:1; min-width:0;" onchange="lendSel('group', this.value)"><option value="">全グループ</option>${groups.map(g => opt(g, g, s.group)).join('')}${opt(SHARED_GROUP_NAME, '🌐 全体利用（共同利用）', s.group)}</select>`;
+        const groupSel = `<select style="flex:1; min-width:0;" onchange="lendSel('group', this.value)"><option value="">全グループ</option>${groups.map(g => opt(g, g, s.group)).join('')}${opt(SHARED_GROUP_NAME, '👪 全体利用（共同利用）', s.group)}</select>`;
         const userSel = isShared
-            ? `<select style="flex:2; min-width:0;" disabled><option selected>🌐 全体利用（全員で共同利用）</option></select>`
+            ? `<select style="flex:2; min-width:0;" disabled><option selected>👪 全体利用（全員で共同利用）</option></select>`
             : `<select style="flex:2; min-width:0;" onchange="lendSel('email', this.value)"><option value="">-- ユーザー選択 --</option>${s.group ? opt('__GROUP__', '🟢 ' + s.group + '（グループ全体）', s.email) : ''}${users.map(u => opt(u.email, (u.name || u.email) + (u.group ? '（' + u.group + '）' : ''), s.email)).join('')}</select>`;
         let html = '<div style="font-weight:bold; margin-bottom:4px;">借りる人</div>'
             + '<div style="display:flex; gap:6px; margin-bottom:10px;">'
@@ -2805,7 +2805,7 @@
             + '</div>';
         if (selArea) {
             // 貸出中=何回目かと現状、未貸出=最終返却日とこれまでの回数（「空き」とは表示しない）
-            const lentName = selArea.group ? (selArea.group === SHARED_GROUP_NAME ? '🌐 全体利用' : selArea.group + '（グループ）') : (selArea.name || uname(selArea.user));
+            const lentName = selArea.group ? (selArea.group === SHARED_GROUP_NAME ? '👪 全体利用' : selArea.group + '（グループ）') : (selArea.name || uname(selArea.user));
             const histInfo = (selArea.user || selArea.group)
                 ? `<span style="color:#C75F56;">貸出中（${selArea.lendCount || 1}回目）: ${escHtml(lentName)}（${escHtml(selArea.lendDate || '-')} → ${escHtml(selArea.dueDate || '-')}）</span>`
                 : `<span style="color:#555;">最終返却日: ${escHtml(selArea.lastReturn || 'なし')}　これまで ${selArea.lendCount || 0} 回</span>`;
@@ -2825,7 +2825,7 @@
         html += `<div style="background:#d4dae0; border:1px solid #b3bcc4; border-radius:6px; padding:8px; margin-top:8px;">`;
         html += `<div style="font-weight:bold; padding-bottom:6px; border-bottom:1px solid #aeb8c0; margin-bottom:4px;">貸出中の区域（${lent.length}）</div>`;
         html += lent.length ? lent.map(a =>
-            `<div class="lend-row"><div class="grow"><b>${escHtml(a.area)}</b>　<span style="font-size:13px; color:#333;">${escHtml(a.group ? (a.group === SHARED_GROUP_NAME ? '🌐 全体利用' : a.group + '（グループ）') : (a.name || uname(a.user)))}</span><br>`
+            `<div class="lend-row"><div class="grow"><b>${escHtml(a.area)}</b>　<span style="font-size:13px; color:#333;">${escHtml(a.group ? (a.group === SHARED_GROUP_NAME ? '👪 全体利用' : a.group + '（グループ）') : (a.name || uname(a.user)))}</span><br>`
             + `<span style="font-size:12px; color:#666;">${escHtml(a.lendDate || '-')} → <span class="${dueClass(a.dueDate)}">${escHtml(a.dueDate || '-')}</span></span></div>`
             + `<button class="clear-btn" onclick="doReturnArea(${a.id}, '${escHtml(a.area)}')">返却</button></div>`
         ).join('') : '<div style="color:#888; padding:6px;">ありません</div>';
