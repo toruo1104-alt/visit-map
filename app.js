@@ -226,6 +226,8 @@
         '移動先に既にピンがあるため移動をキャンセルしました': 'Movimiento cancelado: ya hay un pin en ese punto',
         '指で動かして移動 → 離して確定': 'Arrastre con el dedo y suelte para confirmar',
         '枠線と住所表示を消しますか？': '¿Quitar el marco y la dirección?', '消す': 'Quitar',
+        'には訪問記録があります。部屋を外しても記録は消えず、再び有効にすると復活します。保存しますか？': ' tiene registros de visita. Si quita el cuarto, el registro no se borra y volverá si se reactiva. ¿Guardar?',
+        '外して保存': 'Quitar y guardar',
         '該当の場所が見つかりませんでした': 'No se encontró el lugar',
         '住所検索に失敗しました': 'Falló la búsqueda de dirección',
         'リンクの住所が見つかりませんでした': 'No se encontró la dirección del enlace',
@@ -5025,15 +5027,42 @@
             personalRooms: encodeRoomMarks(gridRoomMark, valid)
         };
 
-        btn.disabled = true; btn.innerText = tr('保存中...');
-        showBusy('更新中…');
-        apiCall('updateBuilding', { data: data }).then((latest) => {
-            showToast('建物情報を更新しました', false);
-            renderMarkers(latest);
-        }).catch((err) => {
-            btn.disabled = false; btn.innerText = tr('更新を保存');
-            handleServerError(err);
-        }).finally(hideBusy);
+        const doSave = () => {
+            btn.disabled = true; btn.innerText = tr('保存中...');
+            showBusy('更新中…');
+            apiCall('updateBuilding', { data: data }).then((latest) => {
+                showToast('建物情報を更新しました', false);
+                renderMarkers(latest);
+            }).catch((err) => {
+                btn.disabled = false; btn.innerText = tr('更新を保存');
+                handleServerError(err);
+            }).finally(hideBusy);
+        };
+
+        // 記録（S列現在値／Q列履歴）を持つ部屋を外すときは確認する。
+        // 記録自体はS/Q列に温存され、再び有効にすると復活する仕様（管理人の温存と同じ思想）のため、
+        // 無警告のまま保存すると「記録が消えた／別の部屋の記録が復活した」と誤解されうる。
+        const item = currentData.find(d => d.rowNumber === rowNumber);
+        if (item) {
+            const oldValid = String(item.有効部屋リスト || '').split(',').map(s => parseInt(s)).filter(n => !isNaN(n));
+            const validSet = new Set(valid);
+            const removed = oldValid.filter(rn => !validSet.has(rn));
+            let historyArr = [];
+            try { historyArr = JSON.parse(item.履歴データ || '[]') || []; } catch (e) { historyArr = []; }
+            const hasRecord = (rn) => {
+                if (roomStatusOf(item, rn)) return true;
+                const prefix = roomTag(rn) + ': ';
+                return historyArr.some(h => String((h && h.status) || '').indexOf(prefix) === 0);
+            };
+            const withRecord = removed.filter(hasRecord).sort((a, b) => a - b);
+            if (withRecord.length > 0) {
+                const roomsText = withRecord.map(rn => tr(roomTag(rn))).join('・');
+                const msg = roomsText + tr('には訪問記録があります。部屋を外しても記録は消えず、再び有効にすると復活します。保存しますか？');
+                appConfirm(msg, { okLabel: '外して保存' }).then(ok => { if (ok) doSave(); });
+                return;
+            }
+        }
+        doSave();
     }
 
     // 編集をキャンセルして詳細表示に戻す（更新しない）
